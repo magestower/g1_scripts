@@ -1,0 +1,48 @@
+# --- [ Unity 필수 제외 폴더 ] ---
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[MemoryCaptures]/
+/[UserSettings]/
+
+# --- [ 에셋 스토어 및 외부 에셋 ] ---
+# 앞서 말씀하신 AssetShop 폴더를 제외하려면 아래 줄을 추가하세요.
+/[Aa]ssets/AssetShop/
+/[Aa]ssets/VFX_Temp/
+
+
+# --- [ IDE 및 프로젝트 파일 ] ---
+# Visual Studio / Rider / VS Code 관련 임시 파일
+.vs/
+.vscode/
+.gradle/
+ExportedObj/
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svclog
+*.pdb
+*.opendb
+*.IDB
+*.VC.db
+*.VC.opendb
+.utmp/
+
+# --- [ OS 관련 ] ---
+.DS_Store
+Thumbs.db
+
+# --- [ Unity 자동 생성 파일 ] ---
+sysinfo.txt
+*.apk
+*.unitypackage

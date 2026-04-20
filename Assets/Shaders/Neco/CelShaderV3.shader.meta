@@ -1,0 +1,26 @@
+fileFormatVersion: 2
+guid: 189d153d3cc025d41b7eddd2a1d569fb
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures:
+  - _normal_map: {instanceID: 0}
+  - _BaseTex: {instanceID: 0}
+  - _BuffTex: {instanceID: 0}
+  - _BuffTex_switch: {instanceID: 0}
+  - _matcap: {instanceID: 0}
+  - _special_buff_switch: {instanceID: 0}
+  - _Emissive_Tex: {instanceID: 0}
+  - _dissolve: {instanceID: 0}
+  - _texcoord: {instanceID: 0}
+  nonModifiableTextures: []
+  preprocessorOverride: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 259864
+  packageName: Anime Cel Shader URP
+  packageVersion: 3.1.1
+  assetPath: Assets/NekoLegends/Shaders/ShaderAnimeCel/CelShaderV3.shader
+  uploadId: 794136

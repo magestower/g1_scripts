@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp:*)",
+      "Bash(uvx --python \">=3.11\" coplay-mcp-server@latest --help)",
+      "Bash(C:/Users/jeisw/.local/bin/uvx.exe --python \">=3.11\" coplay-mcp-server@latest --help)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//d/workspace/code/G1/**)",
+      "Bash(done)",
+      "mcp__UnityMCP__batch_execute",
+      "mcp__UnityMCP__create_script",
+      "Bash(del /F /Q \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ToonURP_3Das2D.shader\" \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ToonURP_3Das2D.shader.meta\" \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ObjectTransform.hlsl\" \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ObjectTransform.hlsl.meta\" \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ShapeLight2D.hlsl\" \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ShapeLight2D.hlsl.meta\")",
+      "Bash(powershell.exe -Command \"Remove-Item -Force ''D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ToonURP_3Das2D.shader'', ''D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ToonURP_3Das2D.shader.meta'', ''D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ObjectTransform.hlsl'', ''D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ObjectTransform.hlsl.meta'', ''D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ShapeLight2D.hlsl'', ''D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders\\\\ShapeLight2D.hlsl.meta''; Write-Host ''Done''\")",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Path ''D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders'' -ErrorAction SilentlyContinue | Select-Object Name\")",
+      "Bash(powershell.exe -Command \"Test-Path ''D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Shaders''\")",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Path ''D:\\\\workspace\\\\code\\\\G1\\\\Assets'' -Directory | Select-Object Name\")",
+      "mcp__UnityMCP__manage_scene",
+      "mcp__UnityMCP__manage_components",
+      "Bash(dir \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\" /b)",
+      "mcp__UnityMCP__manage_script",
+      "Bash(ls \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Scripts\\\\UI\"\" 2>/dev/null || echo \"디렉토리 없음 \")",
+      "mcp__UnityMCP__execute_menu_item",
+      "Bash(del \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Scripts\\\\Costume\\\\OutfitSlot.cs\")",
+      "Bash(del \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Scripts\\\\Costume\\\\OutfitSlot.cs.meta\")",
+      "Bash(del \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Scripts\\\\Costume\\\\BodyPartFlags.cs\")",
+      "Bash(del \"D:\\\\workspace\\\\code\\\\G1\\\\Assets\\\\Scripts\\\\Costume\\\\BodyPartFlags.cs.meta\")",
+      "mcp__UnityMCP__validate_script"
+    ]
+  }
+}
