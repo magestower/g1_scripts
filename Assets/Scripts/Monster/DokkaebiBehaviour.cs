@@ -29,6 +29,8 @@ namespace G1
             Idle,
             /// <summary>플레이어 감지, 슬롯/플레이어 방향으로 이동 중</summary>
             Chase,
+            /// <summary>배정된 슬롯에 도착해 Obstacle 모드로 대기 중 (ring 1+)</summary>
+            SlotWait,
             /// <summary>공격 범위 내, 공격 중</summary>
             Attack,
             /// <summary>사망</summary>
@@ -63,11 +65,15 @@ namespace G1
         private IDamageable playerDamageable;
         private NavMeshAgent agent;
         private NavMeshObstacle obstacle;
-        private float lastAttackTime = -999f;
+        private float lastAttackTime = NeverAttacked;
         private bool atSlot;
 
         // 부동소수점 이동 연산 오차 허용 범위
         private const float DistanceTolerance = 0.10f;
+        // 슬롯 이탈 판정 임계값 — 플레이어 이동으로 슬롯이 이 거리 이상 멀어지면 재배정
+        private const float DepartThresh = 1.2f;
+        // 공격 쿨다운 초기값 — 게임 시작 즉시 공격 가능하도록 충분히 작은 값
+        private const float NeverAttacked = -999f;
 
         // ─────────────────────────────────────────
         // Unity 이벤트
@@ -112,7 +118,6 @@ namespace G1
 
             UpdateState(flatDist);
             ExecuteState(flatDir, flatDist);
-            ApplySeparation();
         }
 
         // ─────────────────────────────────────────
@@ -136,23 +141,34 @@ namespace G1
             // Chase 유지 조건: 슬롯 미배정 / 슬롯 미도착 / ring 0 추가 접근 중
             bool slotReachable = !hasSlot || !atSlot || needsApproach;
 
-            if (flatDist <= (attackRadius + DistanceTolerance) && !slotReachable)
+            if (flatDist <= attackRadius + DistanceTolerance && !slotReachable)
             {
-                // Obstacle 모드 해제 — ring 0은 obstacle이 꺼져있으므로 조건 무관하게 atSlot 리셋
-                if (obstacle.enabled)
-                    SetObstacleMode(false);
-                atSlot = false;
+                // Attack 진입: Obstacle ON으로 자리 확보
+                if (!obstacle.enabled)
+                    SetObstacleMode(true);
                 currentState = EnemyState.Attack;
             }
-            else if (flatDist <= detectRadius)
-                currentState = EnemyState.Chase;
-            else
+            else if (flatDist > detectRadius)
             {
-                // Idle 전환 시 Obstacle 모드 해제 — ring 0 포함 항상 atSlot 리셋
+                // 감지 범위 이탈: Obstacle 해제 후 Idle
                 if (obstacle.enabled)
                     SetObstacleMode(false);
                 atSlot = false;
                 currentState = EnemyState.Idle;
+            }
+            else if (atSlot && AssignedSlotRing > 0)
+            {
+                // ring 1+가 슬롯에 대기 중: SlotWait 유지 (Obstacle ON은 HandleChase에서 설정)
+                currentState = EnemyState.SlotWait;
+            }
+            else
+            {
+                // 이동 중: Chase — Obstacle 해제 보장 (Attack/SlotWait에서 전환 시 해제)
+                if (obstacle.enabled)
+                    SetObstacleMode(false);
+                if (currentState == EnemyState.Attack)
+                    atSlot = false; // Attack에서 복귀 시 슬롯 재접근
+                currentState = EnemyState.Chase;
             }
         }
 
@@ -165,6 +181,7 @@ namespace G1
             {
                 case EnemyState.Idle: HandleIdle(); break;
                 case EnemyState.Chase: HandleChase(flatDir, flatDist); break;
+                case EnemyState.SlotWait: HandleSlotWait(flatDir); break;
                 case EnemyState.Attack: HandleAttack(flatDir); break;
             }
         }
@@ -190,9 +207,9 @@ namespace G1
         }
 
         /// <summary>
-        /// Chase: NavMeshAgent로 슬롯 위치(또는 플레이어)를 향해 이동한다.
-        /// ring 0 + atSlot 상태에서는 플레이어 방향으로 추가 접근한다.
-        /// ring 1+ + atSlot 상태에서는 제자리 대기한다.
+        /// Chase: NavMeshAgent로 슬롯(또는 플레이어) 방향으로 이동한다.
+        /// 항상 Agent 모드임이 보장된다 (UpdateState에서 Obstacle 해제 후 진입).
+        /// ring 0이 슬롯 도착 후에는 플레이어 방향으로 추가 접근한다.
         /// </summary>
         /// <param name="flatDir">플레이어 방향 수평 벡터 (Y=0)</param>
         /// <param name="flatDist">플레이어까지의 수평(XZ) 거리</param>
@@ -204,58 +221,21 @@ namespace G1
                 toSlot.y = 0f;
                 float targetDist = toSlot.magnitude;
 
-                // arriveThresh: NavMeshAgent 정지 오차를 고려해 고정값 사용
-                // departThresh: 플레이어 이동으로 슬롯이 갱신될 때 진동 방지를 위해 넉넉하게 설정
-                const float arriveThresh = 0.5f;
-                const float departThresh = 1.2f;
-
                 // 슬롯 도착 판정
-                if (targetDist <= arriveThresh)
+                if (targetDist <= DistanceTolerance && !atSlot)
                 {
-                    // ring 0은 추가 접근이 필요하므로 Agent 모드 유지, ring 1+만 장애물 등록
-                    // atSlot이 이미 true면 SetObstacleMode 중복 호출 방지
-                    if (!atSlot)
-                    {
-                        atSlot = true;
-                        if (AssignedSlotRing != 0)
-                            SetObstacleMode(true);
-                    }
-                    // ring 0은 추가 접근이 남아있으므로 return하지 않고 아래 이동 로직으로 진행
+                    atSlot = true;
                     if (AssignedSlotRing != 0)
-                    {
-                        RotateToward(flatDir);
-                        animator.SetFloat(SpeedHash, 0f);
-                        return;
-                    }
+                        StopAgent(); // ring 1+: 잔여 경로로 인한 관성 이동 방지
+                    // ring 1+는 다음 프레임 UpdateState에서 SlotWait으로 전환
                 }
 
-                // 이탈 판정 — 슬롯이 너무 멀어진 경우 atSlot 해제 후 새 슬롯 재배정 요청
-                // return으로 이번 프레임 이동을 스킵해 Vector3.zero로의 이동 방지
-                if (atSlot && targetDist > departThresh)
+                if (atSlot && AssignedSlotRing == 0 && flatDist > attackRadius + DistanceTolerance)
                 {
-                    atSlot = false;
-                    if (AssignedSlotRing != 0)
-                        SetObstacleMode(false); // ring 1+: 장애물 해제 후 Agent 재활성
-                    MonsterManager.Instance?.RequestReassign(this);
-                    return;
+                    // ring 0: 슬롯 도착 후 플레이어 방향으로 추가 접근
+                    MoveAgent(playerTransform.position);
                 }
-
-                if (atSlot)
-                {
-                    if (AssignedSlotRing == 0 && flatDist > attackRadius + DistanceTolerance)
-                    {
-                        // ring 0: 플레이어 방향으로 추가 접근
-                        MoveAgent(playerTransform.position);
-                    }
-                    else
-                    {
-                        // ring 1+: Obstacle 모드로 제자리 대기 (agent 비활성 상태이므로 StopAgent 불필요)
-                        RotateToward(flatDir);
-                        animator.SetFloat(SpeedHash, 0f);
-                        return;
-                    }
-                }
-                else
+                else if (!atSlot)
                 {
                     // 슬롯을 향해 이동
                     MoveAgent(AssignedSlotPos);
@@ -264,24 +244,43 @@ namespace G1
             else
             {
                 // 슬롯 미배정 — 플레이어 방향으로 직접 이동
-                atSlot = false;
                 MoveAgent(playerTransform.position);
             }
 
-            // 이동 방향으로 회전 — velocity 기반, 없으면 플레이어 방향 (Obstacle 모드면 flatDir만 사용)
-            if (agent.enabled)
+            // 이동 방향으로 회전 — velocity 기반, 없으면 플레이어 방향
+            Vector3 vel = agent.velocity;
+            vel.y = 0f;
+            RotateToward(vel.sqrMagnitude > 0.01f ? vel : flatDir);
+            bool isMoving = vel.magnitude > 0.1f || agent.hasPath || agent.pathPending;
+            animator.SetFloat(SpeedHash, isMoving ? 1f : 0f);
+        }
+
+        /// <summary>
+        /// SlotWait: ring 1+ 몬스터가 슬롯에 도착해 Obstacle 모드로 대기한다.
+        /// 슬롯이 너무 멀어지면 Obstacle 해제 후 Chase로 재배정한다.
+        /// </summary>
+        /// <param name="flatDir">플레이어 방향 수평 벡터 (Y=0)</param>
+        private void HandleSlotWait(Vector3 flatDir)
+        {
+            // Obstacle 모드 진입 (중복 호출 방지)
+            if (!obstacle.enabled)
+                SetObstacleMode(true);
+
+            Vector3 toSlot = AssignedSlotPos - transform.position;
+            toSlot.y = 0f;
+
+            // 슬롯 이탈 판정 — 플레이어 이동으로 슬롯 위치가 크게 갱신된 경우
+            if (toSlot.magnitude > DepartThresh)
             {
-                Vector3 velocity = agent.velocity;
-                velocity.y = 0f;
-                RotateToward(velocity.sqrMagnitude > 0.01f ? velocity : flatDir);
-                bool isMoving = agent.velocity.magnitude > 0.1f || agent.hasPath || agent.pathPending;
-                animator.SetFloat(SpeedHash, isMoving ? 1f : 0f);
+                atSlot = false;
+                SetObstacleMode(false);
+                MonsterManager.Instance?.RequestReassign(this);
+                return;
             }
-            else
-            {
-                RotateToward(flatDir);
-                animator.SetFloat(SpeedHash, 0f);
-            }
+
+            // 제자리 대기: 플레이어 방향으로 회전만 수행
+            RotateToward(flatDir);
+            animator.SetFloat(SpeedHash, 0f);
         }
 
         /// <summary>
@@ -304,6 +303,17 @@ namespace G1
             }
         }
 
+        /// <inheritdoc/>
+        public override int NavMeshPriority => agent != null ? agent.avoidancePriority : 99;
+
+        /// <summary>NavMeshAgent의 회피 우선순위를 설정한다.</summary>
+        /// <param name="priority">0(최고) ~ 99(최저)</param>
+        public override void SetAvoidancePriority(int priority)
+        {
+            if (agent is not null)
+                agent.avoidancePriority = priority;
+        }
+
         /// <summary>NavMeshAgent에 목적지를 설정하고 이동을 활성화한다.</summary>
         /// <param name="destination">목적지 월드 좌표</param>
         private void MoveAgent(Vector3 destination)
@@ -313,28 +323,10 @@ namespace G1
             agent.SetDestination(destination);
         }
 
-        /// <summary>
-        /// 이동 중일 때만 분리 벡터를 Warp로 적용해 몬스터 간 겹침을 완화한다.
-        /// 정지 상태(atSlot 대기, Attack)에서는 Warp를 호출하지 않아 경로 리셋을 방지한다.
-        /// </summary>
-        private void ApplySeparation()
-        {
-            if (!agent.enabled) return;   // Obstacle 모드에서는 스킵
-            if (!agent.isOnNavMesh) return;
-            if (agent.isStopped) return;  // 정지 중에는 Warp 금지
-
-            Vector3 sep = SeparationVec;
-            sep.y = 0f;
-            if (sep.sqrMagnitude < 0.001f) return;
-
-            agent.Warp(transform.position + sep * Time.deltaTime);
-        }
-
         /// <summary>NavMeshAgent 이동을 정지한다.</summary>
         private void StopAgent()
         {
-            if (!agent.enabled) return;
-            if (!agent.isOnNavMesh) return;
+            if (!agent.enabled || !agent.isOnNavMesh) return;
             agent.isStopped = true;
             agent.velocity = Vector3.zero;
         }
@@ -370,11 +362,9 @@ namespace G1
         {
             if (playerTransform == null) return;
 
-            float flatDist = Vector3.Distance(
-                new Vector3(transform.position.x, 0f, transform.position.z),
-                new Vector3(playerTransform.position.x, 0f, playerTransform.position.z));
-
-            if (flatDist > attackRadius + DistanceTolerance) return;
+            Vector3 toPlayer = playerTransform.position - transform.position;
+            toPlayer.y = 0f;
+            if (toPlayer.magnitude > attackRadius + DistanceTolerance) return;
 
             playerDamageable?.TakeDamage(attackDamage);
         }
@@ -389,11 +379,7 @@ namespace G1
             base.Die();
             currentState = EnemyState.Dead;
             SetObstacleMode(false); // Obstacle 모드 중 사망 시 Agent 복귀 후 정지
-            if (agent != null && agent.isOnNavMesh)
-            {
-                agent.isStopped = true;
-                agent.velocity = Vector3.zero;
-            }
+            StopAgent();
         }
 
         /// <summary>풀에서 재사용될 때 AI 상태와 Agent를 초기화한다.</summary>
@@ -401,18 +387,15 @@ namespace G1
         {
             base.ResetState();
             currentState = EnemyState.Idle;
-            lastAttackTime = -999f;
+            lastAttackTime = NeverAttacked;
             atSlot = false;
             // Awake보다 ResetState가 먼저 호출될 수 있으므로 null이면 재캐싱
             if (agent == null) agent = GetComponent<NavMeshAgent>();
             if (obstacle == null) obstacle = GetComponent<NavMeshObstacle>();
             SetObstacleMode(false); // 풀 반납 후 재사용 시 Agent 모드로 복귀
+            StopAgent();
             if (agent != null && agent.isOnNavMesh)
-            {
-                agent.isStopped = true;
-                agent.velocity = Vector3.zero;
                 agent.ResetPath();
-            }
         }
 
 #if UNITY_EDITOR

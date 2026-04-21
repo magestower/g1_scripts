@@ -45,14 +45,7 @@ namespace G1
         /// <summary>생성할 최대 링 수.</summary>
         [SerializeField] private int maxRings = 5;
 
-        [Header("분리 벡터")]
-        /// <summary>주변 몬스터를 밀어낼 반경</summary>
-        [SerializeField] private float separationRadius = 1.2f;
-
-        /// <summary>분리력 세기</summary>
-        [SerializeField] private float separationStrength = 2f;
-
-        /// <summary>슬롯·분리 벡터 갱신 주기 (초)</summary>
+        /// <summary>슬롯 배정 갱신 주기 (초)</summary>
         [SerializeField] private float updateInterval = 0.1f;
 
         // ─────────────────────────────────────────
@@ -92,6 +85,9 @@ namespace G1
         /// <summary>AssignSlots에서 매 틱 재사용하는 미배정 몬스터 버퍼. GC 할당 방지.</summary>
         private readonly List<(MonsterBase monster, float angle)> unassignedBuffer = new();
 
+        /// <summary>회수된 avoidancePriority 풀. 0~98 범위에서 순차 발급 후 사망 시 반납.</summary>
+        private readonly Queue<int> priorityPool = new();
+
         /// <summary>현재 살아있는 몬스터 수</summary>
         public int AliveCount => activeMonsters.Count;
 
@@ -109,6 +105,10 @@ namespace G1
             }
             Instance = this;
             MonsterBase.OnMonsterDied += OnMonsterDied;
+
+            // avoidancePriority 풀 초기화 (0~98, 99는 기본값으로 예약)
+            for (int i = 0; i < 99; i++)
+                priorityPool.Enqueue(i);
         }
 
         /// <summary>인스펙터 값 변경 시 유효성을 검증한다.</summary>
@@ -151,7 +151,6 @@ namespace G1
             timer = 0f;
 
             AssignSlots();
-            CalcSeparations();
         }
 
         // ─────────────────────────────────────────
@@ -167,6 +166,10 @@ namespace G1
             if (monsterSlotMap.ContainsKey(monster)) return;
             activeMonsters.Add(monster);
             monsterSlotMap[monster] = -1;
+
+            // Priority 발급 — 풀이 고갈되면 기본값(99) 유지
+            if (priorityPool.Count > 0)
+                monster.SetAvoidancePriority(priorityPool.Dequeue());
         }
 
         /// <summary>
@@ -191,6 +194,11 @@ namespace G1
         {
             activeMonsters.Remove(monster);
             ReleaseSlot(monster);
+
+            // Priority 반납
+            if (monsterSlotMap.TryGetValue(monster, out _))
+                priorityPool.Enqueue(monster.NavMeshPriority);
+
             monsterSlotMap.Remove(monster);
         }
 
@@ -242,50 +250,79 @@ namespace G1
         {
             Vector3 playerPos = playerTransform.position;
 
-            // 미배정 몬스터 목록을 각도 순으로 정렬해 배정 순서 편향 제거 (GC 방지: 필드 버퍼 재사용)
+            // 전체 미배정 몬스터를 각도 순으로 수집 (GC 방지: 필드 버퍼 재사용)
             unassignedBuffer.Clear();
             for (int m = 0; m < activeMonsters.Count; m++)
             {
                 MonsterBase monster = activeMonsters[m];
                 if (monsterSlotMap.TryGetValue(monster, out int assigned) && assigned >= 0) continue;
 
-                Vector3 toMonster    = monster.transform.position - playerPos;
-                float   monsterAngle = toMonster.sqrMagnitude > 0.0001f
+                Vector3 toMonster = monster.transform.position - playerPos;
+                float   angle     = toMonster.sqrMagnitude > 0.0001f
                     ? Mathf.Atan2(toMonster.z, toMonster.x)
                     : Random.Range(0f, 2f * Mathf.PI);
-                if (monsterAngle < 0f) monsterAngle += 2f * Mathf.PI;
-                unassignedBuffer.Add((monster, monsterAngle));
+                if (angle < 0f) angle += 2f * Mathf.PI;
+                unassignedBuffer.Add((monster, angle));
             }
             unassignedBuffer.Sort((a, b) => a.angle.CompareTo(b.angle));
 
-            // ring 0 슬롯 간격의 절반을 angleTolerance로 사용 (슬롯 간격 > tolerance 보장)
-            int   ring0SlotCount   = 0;
+            // ring 0에 배정할 몬스터: 각도 순 정렬된 버퍼에서 균등 간격으로 선발
+            // 선발 수 = Min(미배정 몬스터 수, ring 0 빈 슬롯 수)
+            int ring0Free = 0;
             for (int i = 0; i < totalSlots; i++)
-                if (slotMetas[i].ring == 0) { ring0SlotCount = slotMetas[i].slotsInRing; break; }
-            float angleTolerance = ring0SlotCount > 0
-                ? (360f / ring0SlotCount * 0.6f)  // 슬롯 간격의 60% — 인접 슬롯까지 허용
-                : 30f;
+                if (slotMetas[i].ring == 0 && slots[i] == null) ring0Free++;
 
+            int pickCount = Mathf.Min(unassignedBuffer.Count, ring0Free);
+
+            // 균등 간격으로 몬스터를 선발해 ring 0에 배정
+            for (int p = 0; p < pickCount; p++)
+            {
+                // 버퍼 전체를 균등 분할해 대표 인덱스 선택
+                int         idx          = Mathf.FloorToInt(p * unassignedBuffer.Count / (float)pickCount);
+                MonsterBase monster      = unassignedBuffer[idx].monster;
+                float       monsterAngle = unassignedBuffer[idx].angle;
+
+                // 이미 배정된 몬스터면 스킵 (중복 선발 방지)
+                if (monsterSlotMap.TryGetValue(monster, out int cur) && cur >= 0) continue;
+
+                // ring 0 슬롯 중 각도 차이 최소 슬롯 배정
+                int   bestSlot      = -1;
+                float bestAngleDiff = float.MaxValue;
+                for (int i = 0; i < totalSlots; i++)
+                {
+                    if (slots[i] != null || slotMetas[i].ring != 0) continue;
+                    float slotAngle = slotMetas[i].indexInRing * (2f * Mathf.PI / slotMetas[i].slotsInRing);
+                    float diff      = Mathf.Abs(Mathf.DeltaAngle(
+                        monsterAngle * Mathf.Rad2Deg, slotAngle * Mathf.Rad2Deg));
+                    if (diff < bestAngleDiff)
+                    {
+                        bestAngleDiff = diff;
+                        bestSlot      = i;
+                    }
+                }
+                if (bestSlot < 0) continue;
+                slots[bestSlot]         = monster;
+                monsterSlotMap[monster] = bestSlot;
+            }
+
+            // 나머지 미배정 몬스터를 ring 1+에 각도 차이 최소로 배정
             for (int m = 0; m < unassignedBuffer.Count; m++)
             {
-                MonsterBase monster      = unassignedBuffer[m].monster;
-                float       monsterAngle = unassignedBuffer[m].angle;
+                MonsterBase monster = unassignedBuffer[m].monster;
+                if (monsterSlotMap.TryGetValue(monster, out int cur) && cur >= 0) continue;
 
+                float monsterAngle  = unassignedBuffer[m].angle;
                 int   bestSlot      = -1;
                 int   bestRing      = int.MaxValue;
                 float bestAngleDiff = float.MaxValue;
 
                 for (int i = 0; i < totalSlots; i++)
                 {
-                    if (slots[i] != null) continue;
-
+                    if (slots[i] != null || slotMetas[i].ring == 0) continue;
                     SlotMeta meta      = slotMetas[i];
                     float    slotAngle = meta.indexInRing * (2f * Mathf.PI / meta.slotsInRing);
                     float    diff      = Mathf.Abs(Mathf.DeltaAngle(
                         monsterAngle * Mathf.Rad2Deg, slotAngle * Mathf.Rad2Deg));
-
-                    if (diff > angleTolerance) continue;
-
                     bool betterRing     = meta.ring < bestRing;
                     bool sameRingBetter = meta.ring == bestRing && diff < bestAngleDiff;
                     if (betterRing || sameRingBetter)
@@ -295,30 +332,7 @@ namespace G1
                         bestSlot      = i;
                     }
                 }
-
-                // 허용 범위 내 슬롯이 없으면 각도 무시하고 가장 가까운 빈 슬롯 배정
-                if (bestSlot < 0)
-                {
-                    for (int i = 0; i < totalSlots; i++)
-                    {
-                        if (slots[i] != null) continue;
-                        SlotMeta meta      = slotMetas[i];
-                        float    slotAngle = meta.indexInRing * (2f * Mathf.PI / meta.slotsInRing);
-                        float    diff      = Mathf.Abs(Mathf.DeltaAngle(
-                            monsterAngle * Mathf.Rad2Deg, slotAngle * Mathf.Rad2Deg));
-                        bool betterRing     = meta.ring < bestRing;
-                        bool sameRingBetter = meta.ring == bestRing && diff < bestAngleDiff;
-                        if (betterRing || sameRingBetter)
-                        {
-                            bestRing      = meta.ring;
-                            bestAngleDiff = diff;
-                            bestSlot      = i;
-                        }
-                    }
-                }
-
                 if (bestSlot < 0) continue;
-
                 slots[bestSlot]         = monster;
                 monsterSlotMap[monster] = bestSlot;
             }
@@ -327,9 +341,8 @@ namespace G1
             for (int i = 0; i < totalSlots; i++)
             {
                 if (slots[i] == null) continue;
-                float r = CalcSlotRadius(i, slots[i].ColliderRadius);
                 slots[i].AssignedSlotPos    = CalcSlotPosition(playerPos, i, slots[i].ColliderRadius);
-                slots[i].AssignedSlotRadius = r;
+                slots[i].AssignedSlotRadius = CalcSlotRadius(i, slots[i].ColliderRadius);
                 slots[i].AssignedSlotRing   = slotMetas[i].ring;
             }
         }
@@ -371,41 +384,6 @@ namespace G1
         }
 
         // ─────────────────────────────────────────
-        // 분리 벡터 계산
-        // ─────────────────────────────────────────
-
-        /// <summary>
-        /// 모든 몬스터 쌍을 순회해 separationRadius 이내 몬스터끼리 분리 벡터를 계산한다.
-        /// Physics 쿼리 없이 위치 비교만으로 처리한다.
-        /// </summary>
-        private void CalcSeparations()
-        {
-            for (int i = 0; i < activeMonsters.Count; i++)
-                activeMonsters[i].SeparationVec = Vector3.zero;
-
-            float radiusSq = separationRadius * separationRadius;
-
-            for (int i = 0; i < activeMonsters.Count; i++)
-            {
-                for (int j = i + 1; j < activeMonsters.Count; j++)
-                {
-                    Vector3 diff = activeMonsters[i].transform.position - activeMonsters[j].transform.position;
-                    diff.y = 0f;
-
-                    float distSq = diff.sqrMagnitude;
-                    if (distSq >= radiusSq || distSq < 0.0001f) continue;
-
-                    float   dist  = Mathf.Sqrt(distSq);
-                    // 가까울수록 강하게 밀어냄
-                    Vector3 force = diff.normalized * (separationStrength * (1f - dist / separationRadius));
-
-                    activeMonsters[i].SeparationVec += force;
-                    activeMonsters[j].SeparationVec -= force;
-                }
-            }
-        }
-
-        // ─────────────────────────────────────────
         // private 메서드
         // ─────────────────────────────────────────
 
@@ -417,5 +395,40 @@ namespace G1
             if (activeMonsters.Count == 0)
                 OnAllMonstersDied?.Invoke();
         }
+
+#if UNITY_EDITOR
+        // ─────────────────────────────────────────
+        // 에디터 기즈모
+        // ─────────────────────────────────────────
+
+        /// <summary>링별 슬롯 위치를 Scene/Game View(Gizmos ON)에 표시한다. 빈 슬롯은 흰색, 점유 슬롯은 빨간색.</summary>
+        private static readonly Color[] RingColors =
+        {
+            Color.cyan, Color.green, Color.yellow, Color.magenta, Color.white
+        };
+
+        private void OnDrawGizmos()
+        {
+            if (slots == null || playerTransform == null) return;
+
+            Vector3 playerPos = playerTransform.position;
+
+            for (int i = 0; i < totalSlots; i++)
+            {
+                SlotMeta meta   = slotMetas[i];
+                Vector3  pos    = CalcSlotPosition(playerPos, i, avgMonsterRadius);
+                Color    ring   = RingColors[meta.ring % RingColors.Length];
+                bool     occupied = slots[i] != null;
+
+                // 점유 슬롯은 빨간색, 빈 슬롯은 링 색상
+                Gizmos.color = occupied ? Color.red : ring;
+                Gizmos.DrawWireSphere(pos, 0.2f);
+
+                // 플레이어 중심에서 슬롯까지 선
+                Gizmos.color = new Color(ring.r, ring.g, ring.b, 0.3f);
+                Gizmos.DrawLine(playerPos, pos);
+            }
+        }
+#endif
     }
 }

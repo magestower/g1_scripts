@@ -21,8 +21,8 @@ namespace G1
         private static class AnimParam
         {
             public static readonly int IsWalking = Animator.StringToHash("isWalking");
-            public static readonly int Hit       = Animator.StringToHash("Hit");
-            public static readonly int IsDead    = Animator.StringToHash("IsDead");
+            public static readonly int Hit = Animator.StringToHash("Hit");
+            public static readonly int IsDead = Animator.StringToHash("IsDead");
         }
 
         [Header("체력")]
@@ -36,7 +36,7 @@ namespace G1
         public bool IsDead => playerState == PlayerState.Dead;
 
         /// <summary>
-        /// 데미지를 받아 체력을 감소시킨다. 사망 시 OnDie()를 호출한다.
+        /// 데미지를 받아 체력을 감소시킨다. 사망 시 Dead 상태로 전이한다.
         /// </summary>
         /// <param name="damage">적용할 데미지 양 (양수)</param>
         public void TakeDamage(int damage)
@@ -55,15 +55,12 @@ namespace G1
             if (currentHealth <= 0)
             {
                 currentHealth = 0;
-                OnDie();
+                // 사망 전 Hit 트리거를 제거해 GetHit 애니메이션이 사망 애니메이션보다 먼저 재생되는 것을 방지
+                animator.ResetTrigger(AnimParam.Hit);
+                TransitionTo(PlayerState.Dead);
             }
         }
 
-        /// <summary>플레이어 사망 처리. Dead 상태로 전이하고 사망 애니메이션을 재생한다.</summary>
-        private void OnDie()
-        {
-            TransitionTo(PlayerState.Dead);
-        }
 
         [Header("공격 데이터")]
         /// <summary>
@@ -80,6 +77,9 @@ namespace G1
 
         /// <summary>현재 Idle 상태 여부 — NeckController 등 외부에서 비활성 조건 판단에 사용</summary>
         public bool IsIdle => playerState == PlayerState.Idle;
+
+        /// <summary>현재 공격 중 여부 — GetHitStateBehaviour에서 강제 공격 종료 판단에 사용</summary>
+        public bool IsAttacking => playerState == PlayerState.Attacking;
 
         /// <summary>현재 장착 무기 타입 — 미장착 시 Unarmed 반환</summary>
         public WeaponType CurrentWeaponType
@@ -103,8 +103,6 @@ namespace G1
         [SerializeField] private float rotationSpeed = 10f;
         private CharacterController controller;
         private Animator animator;
-        private float verticalVelocity;
-        private float minY = 0; // 추락 방지
         private PlayerState playerState = PlayerState.Idle;
         [SerializeField] private float moveResumeDelay = 0.1f; // 이동 대기 시간
 
@@ -261,23 +259,8 @@ namespace G1
                     Debug.LogWarning("[PlayerController] rangeIndicator 머티리얼 셰이더를 찾을 수 없습니다. 인스펙터에서 직접 할당해 주세요.");
             }
 
-            rangeIndicator.startColor = detectRadiusColor;
-            rangeIndicator.endColor = detectRadiusColor;
-
-            // 원형 꼭짓점 계산
             rangeIndicator.positionCount = RangeIndicatorSegments;
-            float angleStep = 360f / RangeIndicatorSegments;
-            for (int i = 0; i < RangeIndicatorSegments; i++)
-            {
-                float angle = i * angleStep * Mathf.Deg2Rad;
-                rangeIndicator.SetPosition(i, new Vector3(
-                    Mathf.Cos(angle) * monsterDetectRadius,
-                    0f,
-                    Mathf.Sin(angle) * monsterDetectRadius
-                ));
-            }
-
-            rangeIndicator.enabled = showDetectRadius;
+            UpdateRangeIndicatorShape();
         }
 
         /// <summary>
@@ -286,8 +269,14 @@ namespace G1
         private void OnValidate()
         {
             if (rangeIndicator == null) return;
+            UpdateRangeIndicatorShape();
+        }
 
-            // 반경 재계산
+        /// <summary>
+        /// 감지 반경 원형 꼭짓점, 색상, 활성화 상태를 갱신합니다.
+        /// </summary>
+        private void UpdateRangeIndicatorShape()
+        {
             float angleStep = 360f / RangeIndicatorSegments;
             for (int i = 0; i < RangeIndicatorSegments; i++)
             {
@@ -298,7 +287,6 @@ namespace G1
                     Mathf.Sin(angle) * monsterDetectRadius
                 ));
             }
-
             rangeIndicator.startColor = detectRadiusColor;
             rangeIndicator.endColor = detectRadiusColor;
             rangeIndicator.enabled = showDetectRadius;
@@ -309,31 +297,13 @@ namespace G1
             // 사망 상태에서는 모든 입력/이동 처리 중단
             if (IsDead) return;
 
-    		// 중력 적용
-    		ApplyGravity();
-
             Vector3 horizontalMove = Vector3.zero;
 
-    		// 이동 및 상태 전환 처리 (Idle, Moving 상태에서만)
-    		if (playerState == PlayerState.Idle || playerState == PlayerState.Moving)
+            // 이동 및 상태 전환 처리 (Idle, Moving 상태에서만)
+            if (playerState == PlayerState.Idle || playerState == PlayerState.Moving)
                 horizontalMove = HandleMovement();
 
-    		// 실제 이동 적용
-    		controller.Move((horizontalMove + new Vector3(0f, verticalVelocity, 0f)) * Time.deltaTime);
-
-    		// Y축 최소값 고정(추락 방지)
-    		ClampPositionY();
-    	}
-
-        /// <summary>
-        /// 중력을 계산합니다. 착지 시 고정값(-1), 공중 시 중력 가속 누적.
-        /// </summary>
-        private void ApplyGravity()
-        {
-            if (controller.isGrounded)
-                verticalVelocity = -1f;
-            else
-                verticalVelocity += Physics.gravity.y * Time.deltaTime;
+            controller.Move(horizontalMove * Time.deltaTime);
         }
 
         /// <summary>
@@ -349,7 +319,7 @@ namespace G1
 
             Vector2 input = Terresquall.VirtualJoystick.GetAxis();
 
-    #if UNITY_EDITOR_WIN
+#if UNITY_EDITOR_WIN
             if (input.sqrMagnitude < 0.01f)
             {
                 float h = 0f;
@@ -362,21 +332,21 @@ namespace G1
 
                 input = new Vector2(h, v);
             }
-    #endif
+#endif
 
             // 배경 경계 도달 시 해당 방향 입력 차단
             // bgBoundary.x =  1 → 배경이 +maxX (캐릭터가 좌(-X) 이동 중) → 좌 입력 차단
             // bgBoundary.x = -1 → 배경이 -maxX (캐릭터가 우(+X) 이동 중) → 우 입력 차단
-            if (bgBoundary.x >  0f && input.x < 0f) input.x = 0f;
-            if (bgBoundary.x < 0f  && input.x > 0f) input.x = 0f;
+            if (bgBoundary.x > 0f && input.x < 0f) input.x = 0f;
+            if (bgBoundary.x < 0f && input.x > 0f) input.x = 0f;
 
-    		/* Y축 경계는 일단 보류
+            /* Y축 경계는 일단 보류
     		 * 상호연동 LINK: D:\workspace\code\G1\Assets\Scripts\UI\BackgroundParallax.cs#L96
             if (bgBoundary.y >  0f && input.y < 0f) input.y = 0f;
             if (bgBoundary.y < 0f  && input.y > 0f) input.y = 0f;
     		*/
 
-    		return input;
+            return input;
         }
 
         /// <summary>
@@ -412,24 +382,25 @@ namespace G1
         }
 
         /// <summary>
-        /// 플레이어 Y 위치를 minY 이하로 내려가지 않도록 고정합니다.
-        /// </summary>
-        private void ClampPositionY()
-        {
-            if (transform.position.y < minY)
-            {
-                Vector3 pos = transform.position;
-                pos.y = minY;
-                transform.position = pos;
-            }
-        }
-
-        /// <summary>
         /// 감지 반경 내에서 가장 가까운 몬스터를 찾아 플레이어가 해당 방향을 바라보도록 즉시 회전합니다.
+        /// 현재 타겟이 공격 사정거리 안에 살아있으면 타겟을 유지하고 해당 방향을 바라봅니다.
         /// 몬스터가 없으면 아무 동작도 하지 않습니다.
         /// </summary>
         private void FaceNearestMonster()
         {
+            // 현재 타겟이 사정거리 안에서 살아있으면 타겟 고정
+            // activeInHierarchy 체크: 풀 반납 후 ResetState로 IsDead=false가 된 오브젝트 오판 방지
+            if (CurrentAttackTarget != null && CurrentAttackTarget.gameObject.activeInHierarchy)
+            {
+                float distToCurrent = Vector3.Distance(transform.position, CurrentAttackTarget.position);
+                bool currentAlive = !CurrentAttackTarget.TryGetComponent<IDamageable>(out var d) || !d.IsDead;
+                if (currentAlive && distToCurrent <= hitRadius)
+                {
+                    FaceToward(CurrentAttackTarget);
+                    return;
+                }
+            }
+
             // monsterTag를 가진 콜라이더를 감지 반경 내에서 탐색 (NonAlloc으로 GC 방지)
             int hitCount = Physics.OverlapSphereNonAlloc(transform.position, monsterDetectRadius, monsterHitBuffer);
 
@@ -452,11 +423,18 @@ namespace G1
             CurrentAttackTarget = nearest;
             if (nearest == null) return;
 
-            // 수평 방향만 계산 (Y축 차이 무시)
-            Vector3 dir = nearest.position - transform.position;
+            FaceToward(nearest);
+        }
+
+        /// <summary>
+        /// 대상 방향(수평)으로 즉시 회전합니다. 거리가 너무 가까우면 무시합니다.
+        /// </summary>
+        /// <param name="target">바라볼 대상 트랜스폼</param>
+        private void FaceToward(Transform target)
+        {
+            Vector3 dir = target.position - transform.position;
             dir.y = 0f;
             if (dir.sqrMagnitude < 0.001f) return;
-
             transform.rotation = Quaternion.LookRotation(dir);
         }
 
@@ -478,7 +456,6 @@ namespace G1
             if (data == null) return;
 
             CurrentAttackData = data;
-            Debug.Log($"공격 시작: {data.name} (슬롯 {slot})");
             TransitionTo(PlayerState.Attacking);
         }
 
@@ -491,19 +468,11 @@ namespace G1
         {
             if (slot == AttackSlot.Basic)
             {
-                // 기본 공격 — 장착 무기의 WeaponType으로 인덱스 결정
-                WeaponType weaponType = WeaponType.Unarmed;
-                if (equipmentManager != null)
-                {
-                    EquipmentData equipped = equipmentManager.GetEquippedData(EquipmentSlot.Weapon);
-                    if (equipped != null)
-                        weaponType = equipped.weaponType;
-                }
-
-                int typeIndex = (int)weaponType;
+                // 기본 공격 — 현재 장착 무기 타입으로 인덱스 결정
+                int typeIndex = (int)CurrentWeaponType;
                 if (weaponAttackData == null || typeIndex >= weaponAttackData.Length)
                 {
-                    Debug.LogWarning($"[PlayerController] weaponAttackData[{typeIndex}]({weaponType})가 할당되지 않았습니다.");
+                    Debug.LogWarning($"[PlayerController] weaponAttackData[{typeIndex}]({CurrentWeaponType})가 할당되지 않았습니다.");
                     return null;
                 }
                 return weaponAttackData[typeIndex];
@@ -554,7 +523,7 @@ namespace G1
             {
                 case PlayerState.Idle:
                     animator.SetBool(AnimParam.IsWalking, false);
-                    if (prev == PlayerState.Moving)    OnMoveStateChanged?.Invoke(false);
+                    if (prev == PlayerState.Moving) OnMoveStateChanged?.Invoke(false);
                     if (prev == PlayerState.Attacking) OnAttackStateChanged?.Invoke(false);
                     break;
 
@@ -576,24 +545,28 @@ namespace G1
                 case PlayerState.Dead:
                     animator.SetBool(AnimParam.IsWalking, false);
                     animator.SetBool(AnimParam.IsDead, true);
-                    if (prev == PlayerState.Moving)    OnMoveStateChanged?.Invoke(false);
+                    if (prev == PlayerState.Moving) OnMoveStateChanged?.Invoke(false);
                     if (prev == PlayerState.Attacking) OnAttackStateChanged?.Invoke(false);
                     OnPlayerDead?.Invoke();
                     break;
             }
         }
 
-        // 공격 애니메이션 끝에서 호출
+        private Coroutine resumeMovementCoroutine;
+
+        /// <summary>
+        /// 공격 애니메이션 끝에서 호출됩니다.
+        /// 중복 호출 및 코루틴 누적을 방지하기 위해 Attacking 상태일 때만 처리한다.
+        /// </summary>
         public void OnAttackEnd()
         {
-            Debug.Log("공격 종료");
-
-
-            StartCoroutine(ResumeMovement());
+            if (!IsAttacking) return;
+            if (resumeMovementCoroutine != null)
+                StopCoroutine(resumeMovementCoroutine);
+            resumeMovementCoroutine = StartCoroutine(ResumeMovement());
         }
 
-
-        IEnumerator ResumeMovement()
+        private IEnumerator ResumeMovement()
         {
             yield return new WaitForSeconds(moveResumeDelay);
             // 사망 상태로 전환된 경우 Idle 복귀 차단

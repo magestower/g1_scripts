@@ -157,6 +157,16 @@ namespace G1
                 Destroy(gameObject); // 풀 미사용 환경 폴백
         }
 
+        /// <summary>현재 NavMeshAgent avoidancePriority 값. 미지원 클래스는 99 반환.</summary>
+        public virtual int NavMeshPriority => 99;
+
+        /// <summary>
+        /// NavMeshAgent의 avoidancePriority를 설정한다.
+        /// NavMeshAgent를 가진 파생 클래스에서 override해 실제 값을 적용한다.
+        /// </summary>
+        /// <param name="priority">0(최고) ~ 99(최저)</param>
+        public virtual void SetAvoidancePriority(int priority) { }
+
         /// <summary>
         /// 풀에서 꺼낼 때 호출된다. 체력·플래그·애니메이터·콜라이더를 초기 상태로 되돌린다.
         /// 파생 클래스에서 override해 추가 상태를 초기화한다.
