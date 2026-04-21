@@ -85,6 +85,9 @@ namespace G1
         /// <summary>AssignSlots에서 매 틱 재사용하는 미배정 몬스터 버퍼. GC 할당 방지.</summary>
         private readonly List<(MonsterBase monster, float angle)> unassignedBuffer = new();
 
+        /// <summary>AssignSlots에서 이번 틱에 신규 배정된 몬스터 버퍼. 슬롯 위치 갱신 후 OnSlotChanged() 호출에 사용.</summary>
+        private readonly List<MonsterBase> newlyAssignedBuffer = new();
+
         /// <summary>회수된 avoidancePriority 풀. 0~98 범위에서 순차 발급 후 사망 시 반납.</summary>
         private readonly Queue<int> priorityPool = new();
 
@@ -180,10 +183,12 @@ namespace G1
         public void RequestReassign(MonsterBase monster)
         {
             ReleaseSlot(monster);
-            monsterSlotMap[monster]    = -1;
-            monster.AssignedSlotPos    = Vector3.zero;
-            monster.AssignedSlotRadius = 0f;
-            monster.AssignedSlotRing   = -1;
+            monsterSlotMap[monster] = -1;
+            // AssignedSlotPos / Radius / Ring은 유지한다.
+            // 즉시 리셋하면 다음 AssignSlots() 틱 전까지 hasSlot=false가 돼
+            // 몬스터가 플레이어 방향으로 달려가는 위치 점프 현상이 발생한다.
+            // AssignSlots()에서 새 슬롯 배정 시 덮어쓰고 OnSlotChanged()를 호출한다.
+            monster.OnSlotChanged();
         }
 
         /// <summary>
@@ -195,9 +200,13 @@ namespace G1
             activeMonsters.Remove(monster);
             ReleaseSlot(monster);
 
-            // Priority 반납
+            // Priority 반납 — 99는 미발급(기본값)이므로 풀에 반납하지 않음
             if (monsterSlotMap.TryGetValue(monster, out _))
-                priorityPool.Enqueue(monster.NavMeshPriority);
+            {
+                int p = monster.NavMeshPriority;
+                if (p != 99)
+                    priorityPool.Enqueue(p);
+            }
 
             monsterSlotMap.Remove(monster);
         }
@@ -252,6 +261,7 @@ namespace G1
 
             // 전체 미배정 몬스터를 각도 순으로 수집 (GC 방지: 필드 버퍼 재사용)
             unassignedBuffer.Clear();
+            newlyAssignedBuffer.Clear();
             for (int m = 0; m < activeMonsters.Count; m++)
             {
                 MonsterBase monster = activeMonsters[m];
@@ -303,6 +313,7 @@ namespace G1
                 if (bestSlot < 0) continue;
                 slots[bestSlot]         = monster;
                 monsterSlotMap[monster] = bestSlot;
+                newlyAssignedBuffer.Add(monster);
             }
 
             // 나머지 미배정 몬스터를 ring 1+에 각도 차이 최소로 배정
@@ -335,6 +346,7 @@ namespace G1
                 if (bestSlot < 0) continue;
                 slots[bestSlot]         = monster;
                 monsterSlotMap[monster] = bestSlot;
+                newlyAssignedBuffer.Add(monster);
             }
 
             // 배정된 모든 슬롯의 위치를 플레이어 이동에 따라 갱신 (신규 배정 포함)
@@ -345,6 +357,10 @@ namespace G1
                 slots[i].AssignedSlotRadius = CalcSlotRadius(i, slots[i].ColliderRadius);
                 slots[i].AssignedSlotRing   = slotMetas[i].ring;
             }
+
+            // 슬롯 위치 갱신 후 신규 배정 몬스터에게 콜백 — 정확한 목적지로 Chase 재개 보장
+            for (int i = 0; i < newlyAssignedBuffer.Count; i++)
+                newlyAssignedBuffer[i].OnSlotChanged();
         }
 
         /// <summary>
@@ -390,10 +406,70 @@ namespace G1
         /// <summary>몬스터 사망 시 목록과 슬롯에서 제거하고 전멸 여부를 확인한다.</summary>
         private void OnMonsterDied(MonsterBase monster)
         {
+            // 사망한 몬스터의 슬롯 정보를 저장한 뒤 제거
+            // TryGetValue 실패 시 diedSlotIdx는 int 기본값(0)이 되므로 반환값으로 유효성 구분
+            bool inMap       = monsterSlotMap.TryGetValue(monster, out int diedSlotIdx);
+            int  diedRing    = (inMap && diedSlotIdx >= 0 && slotMetas != null) ? slotMetas[diedSlotIdx].ring : -1;
+
             Unregister(monster);
+
+            // ring 0 슬롯이 비었으면 ring 1 대기 몬스터 중 가장 가까운 각도의 몬스터를 재배정
+            if (diedRing == 0 && playerTransform != null)
+                PromoteFromRing1(diedSlotIdx);
 
             if (activeMonsters.Count == 0)
                 OnAllMonstersDied?.Invoke();
+        }
+
+        /// <summary>
+        /// 특정 링의 슬롯이 비었을 때, 바로 다음 링(targetRing + 1) 대기 몬스터 중
+        /// 해당 슬롯과 각도가 가장 가까운 몬스터를 RequestReassign()한다.
+        /// 다음 AssignSlots() 틱에서 빈 링으로 진입하고, 연쇄적으로 하위 링도 승격된다.
+        /// </summary>
+        /// <param name="vacatedSlotIdx">비어있는 슬롯 인덱스</param>
+        private void PromoteFromRing1(int vacatedSlotIdx)
+        {
+            if (slots == null || slotMetas == null) return;
+
+            // 비어있는 슬롯의 각도 및 링 번호 계산
+            SlotMeta vacatedMeta  = slotMetas[vacatedSlotIdx];
+            float    vacatedAngle = vacatedMeta.indexInRing * (2f * Mathf.PI / vacatedMeta.slotsInRing);
+
+            // 바로 다음 링(vacatedMeta.ring + 1)부터 순서대로 대기 몬스터를 탐색
+            // 해당 링에 몬스터가 없으면 그 다음 링을 시도해 연쇄 승격을 보장한다.
+            int maxRing = 0;
+            for (int m = 0; m < activeMonsters.Count; m++)
+            {
+                int r = activeMonsters[m].AssignedSlotRing;
+                if (r > maxRing) maxRing = r;
+            }
+
+            for (int searchRing = vacatedMeta.ring + 1; searchRing <= maxRing; searchRing++)
+            {
+                MonsterBase best     = null;
+                float       bestDiff = float.MaxValue;
+
+                for (int m = 0; m < activeMonsters.Count; m++)
+                {
+                    MonsterBase candidate = activeMonsters[m];
+                    if (candidate.AssignedSlotRing != searchRing) continue;
+                    if (!monsterSlotMap.TryGetValue(candidate, out int slotIdx) || slotIdx < 0) continue;
+
+                    SlotMeta meta      = slotMetas[slotIdx];
+                    float    slotAngle = meta.indexInRing * (2f * Mathf.PI / meta.slotsInRing);
+                    float    diff      = Mathf.Abs(Mathf.DeltaAngle(
+                        vacatedAngle * Mathf.Rad2Deg, slotAngle * Mathf.Rad2Deg));
+
+                    if (diff < bestDiff) { bestDiff = diff; best = candidate; }
+                }
+
+                if (best != null)
+                {
+                    RequestReassign(best);
+                    return;
+                }
+                // 해당 링에 아무도 없으면 다음 링 탐색
+            }
         }
 
 #if UNITY_EDITOR

@@ -900,7 +900,8 @@ AnimatorState:
   m_Transitions:
   - {fileID: 7397383897783131152}
   - {fileID: 1705045732314580190}
-  m_StateMachineBehaviours: []
+  m_StateMachineBehaviours:
+  - {fileID: 8479571892190333754}
   m_Position: {x: 50, y: 50, z: 0}
   m_IKOnFeet: 0
   m_WriteDefaultValues: 1
@@ -987,6 +988,18 @@ AnimatorStateTransition:
   m_InterruptionSource: 0
   m_OrderedInterruption: 1
   m_CanTransitionToSelf: 1
+--- !u!114 &8479571892190333754
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae917ece045ebbb4eb2cca74a0a775bb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::G1.GetHitStateBehaviour
 --- !u!1102 &8525654758830769642
 AnimatorState:
   serializedVersion: 6

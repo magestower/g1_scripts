@@ -168,6 +168,12 @@ namespace G1
         public virtual void SetAvoidancePriority(int priority) { }
 
         /// <summary>
+        /// MonsterManager가 슬롯을 변경할 때 호출된다.
+        /// 파생 클래스에서 override해 슬롯 변경에 따른 이동 재개 처리를 구현한다.
+        /// </summary>
+        public virtual void OnSlotChanged() { }
+
+        /// <summary>
         /// 풀에서 꺼낼 때 호출된다. 체력·플래그·애니메이터·콜라이더를 초기 상태로 되돌린다.
         /// 파생 클래스에서 override해 추가 상태를 초기화한다.
         /// </summary>

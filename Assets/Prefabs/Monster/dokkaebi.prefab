@@ -467,7 +467,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 0
+  m_Enabled: 1
   serializedVersion: 2
   m_Radius: 0.3
   m_Height: 1.5
@@ -485,7 +485,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 48ada0b7fde9e8748b907877ac14ac0e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::G1.DokkaebiBehaviour
-  maxHealth: 30
+  maxHealth: 10
   releaseDelay: 3
   detectRadius: 8
   attackRadius: 0.7

@@ -95,7 +95,7 @@ namespace G1
             agent.stoppingDistance = 0f;
 
             obstacle = GetComponent<NavMeshObstacle>();
-            obstacle.carving = true;
+            obstacle.carving = false; // carving 비활성 고정 — 활성화 시 NavMesh 비동기 갱신으로 Agent 재활성 때 위치 스냅 발생
             obstacle.enabled = false; // 초기에는 Agent가 이동을 담당
 
             GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
@@ -158,7 +158,7 @@ namespace G1
             }
             else if (atSlot && AssignedSlotRing > 0)
             {
-                // ring 1+가 슬롯에 대기 중: SlotWait 유지 (Obstacle ON은 HandleChase에서 설정)
+                // ring 1+가 슬롯에 대기 중: SlotWait 유지 (Obstacle ON은 HandleSlotWait 첫 줄에서 설정)
                 currentState = EnemyState.SlotWait;
             }
             else
@@ -248,10 +248,10 @@ namespace G1
             }
 
             // 이동 방향으로 회전 — velocity 기반, 없으면 플레이어 방향
-            Vector3 vel = agent.velocity;
+            Vector3 vel = agent.enabled ? agent.velocity : Vector3.zero;
             vel.y = 0f;
             RotateToward(vel.sqrMagnitude > 0.01f ? vel : flatDir);
-            bool isMoving = vel.magnitude > 0.1f || agent.hasPath || agent.pathPending;
+            bool isMoving = agent.enabled && (vel.magnitude > 0.1f || agent.hasPath || agent.pathPending);
             animator.SetFloat(SpeedHash, isMoving ? 1f : 0f);
         }
 
@@ -272,9 +272,8 @@ namespace G1
             // 슬롯 이탈 판정 — 플레이어 이동으로 슬롯 위치가 크게 갱신된 경우
             if (toSlot.magnitude > DepartThresh)
             {
-                atSlot = false;
                 SetObstacleMode(false);
-                MonsterManager.Instance?.RequestReassign(this);
+                MonsterManager.Instance?.RequestReassign(this); // 내부에서 OnSlotChanged() → atSlot = false
                 return;
             }
 
@@ -301,6 +300,14 @@ namespace G1
                 animator.ResetTrigger(AttackHash); // 누적 트리거 초기화 후 재설정
                 animator.SetTrigger(AttackHash);
             }
+        }
+
+        /// <summary>
+        /// 슬롯이 변경됐을 때 호출된다. atSlot을 리셋해 새 슬롯으로 Chase를 재개한다.
+        /// </summary>
+        public override void OnSlotChanged()
+        {
+            atSlot = false;
         }
 
         /// <inheritdoc/>
