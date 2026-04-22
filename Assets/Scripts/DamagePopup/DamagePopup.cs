@@ -48,6 +48,11 @@ namespace G1
         private void Awake()
         {
             mainCamera = Camera.main;
+            if (label == null)
+            {
+                Debug.LogError("[DamagePopup] label(TextMeshPro) 필드가 연결되지 않았습니다.", this);
+                return;
+            }
             // fontMaterial은 접근마다 복제를 생성하므로 1회만 호출해 캐싱
             matInstance = label.fontMaterial;
             label.fontMaterial = matInstance;
@@ -76,6 +81,8 @@ namespace G1
         /// <param name="onComplete">애니메이션 완료 시 호출할 콜백 (풀 반납용)</param>
         public void Play(int damage, Vector3 worldPos, bool isCritical, Action onComplete)
         {
+            if (label == null) { onComplete?.Invoke(); return; }
+
             // 이전 코루틴이 남아있으면 중단하고 새로 시작
             StopAllCoroutines();
 

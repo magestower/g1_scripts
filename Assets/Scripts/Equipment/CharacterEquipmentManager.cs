@@ -143,8 +143,9 @@ namespace G1
                 return;
 
             // 해제 이벤트는 Destroy 전에 발생 — 구독자가 인스턴스를 참조할 수 있도록
-            EquipmentData data = _equippedData.TryGetValue(slot, out EquipmentData d) ? d : null;
-            OnUnequipped?.Invoke(slot, data);
+            // data가 없는 슬롯은 이벤트를 발행하지 않아 구독자에 null data 전달을 방지한다
+            if (_equippedData.TryGetValue(slot, out EquipmentData data))
+                OnUnequipped?.Invoke(slot, data);
 
             if (existing != null)
             {
