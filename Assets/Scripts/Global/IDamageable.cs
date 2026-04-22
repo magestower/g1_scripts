@@ -12,7 +12,8 @@ namespace G1
         /// 데미지를 받아 체력을 감소시킨다.
         /// </summary>
         /// <param name="damage">적용할 데미지 양 (양수)</param>
-        void TakeDamage(int damage);
+        /// <param name="isCritical">크리티컬 여부. 팝업 색상/크기에 반영된다.</param>
+        void TakeDamage(int damage, bool isCritical = false);
 
         /// <summary>체력이 0 이하인지 여부</summary>
         bool IsDead { get; }

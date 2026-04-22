@@ -39,7 +39,7 @@ namespace G1
         /// 데미지를 받아 체력을 감소시킨다. 사망 시 Dead 상태로 전이한다.
         /// </summary>
         /// <param name="damage">적용할 데미지 양 (양수)</param>
-        public void TakeDamage(int damage)
+        public void TakeDamage(int damage, bool isCritical = false)
         {
             if (IsDead) return;
 

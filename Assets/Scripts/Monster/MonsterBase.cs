@@ -52,6 +52,12 @@ namespace G1
         protected Animator animator;
         protected Collider col;
 
+        /// <summary>
+        /// 데미지 팝업 스폰 기준 위치 (목 본 또는 높이 추정값).
+        /// Awake에서 캐싱되며 TakeDamage에서 사용된다.
+        /// </summary>
+        private Transform neckBone;
+
         /// <summary>현재 체력이 0 이하인지 여부</summary>
         public bool IsDead { get; protected set; }
 
@@ -79,6 +85,35 @@ namespace G1
             animator      = GetComponent<Animator>();
             col           = GetComponent<Collider>();
             currentHealth = maxHealth;
+            neckBone      = FindNeckBone(transform);
+        }
+
+        /// <summary>
+        /// 자식 오브젝트 중 이름에 "neck"이 포함된 Transform을 찾아 반환한다.
+        /// 없으면 null을 반환한다.
+        /// </summary>
+        private static Transform FindNeckBone(Transform root)
+        {
+            foreach (Transform child in root.GetComponentsInChildren<Transform>(includeInactive: true))
+            {
+                if (child.name.IndexOf("neck", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return child;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 데미지 팝업 스폰 위치를 반환한다.
+        /// 목 본이 있으면 그 위치, 없으면 콜라이더 높이의 80% 지점을 추정해 반환한다.
+        /// </summary>
+        private Vector3 GetPopupSpawnPos()
+        {
+            if (neckBone != null)
+                return neckBone.position;
+
+            // 목 본이 없을 때 — CapsuleCollider 높이 기준 80% 지점 추정
+            float height = col is CapsuleCollider cap ? cap.height : 1.8f;
+            return transform.position + Vector3.up * (height * 0.8f);
         }
 
         // ─────────────────────────────────────────
@@ -89,7 +124,8 @@ namespace G1
         /// 데미지를 받아 체력을 감소시킨다. 사망 시 Die()를 호출한다.
         /// </summary>
         /// <param name="damage">적용할 데미지 양</param>
-        public virtual void TakeDamage(int damage)
+        /// <param name="isCritical">크리티컬 여부. 팝업 색상/크기에 반영된다.</param>
+        public virtual void TakeDamage(int damage, bool isCritical = false)
         {
             if (IsDead) return;
 
@@ -100,6 +136,8 @@ namespace G1
             animator.SetTrigger(HitHash);
 
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            // 피해량 수치를 화면에 표시
+            DamagePopupPool.Instance?.Show(damage, GetPopupSpawnPos(), isCritical);
 
             if (currentHealth <= 0)
                 Die();
