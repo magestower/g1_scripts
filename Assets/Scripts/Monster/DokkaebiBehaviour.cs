@@ -341,13 +341,20 @@ namespace G1
         /// <summary>
         /// 이동 재개 모드: Obstacle을 비활성화하고 2프레임 대기 후 Agent를 활성화한다.
         /// NavMeshObstacle carving은 비동기로 해제되므로 충분히 대기해야 Agent 활성화 시 스냅이 없다.
+        /// 대기 중 Die()가 호출되면 EnterObstacleMode()가 다시 실행되므로 isObstacleMode 복원 후 종료한다.
         /// </summary>
         private IEnumerator ExitObstacleModeNextFrame()
         {
             obstacle.enabled = false;
             yield return null;
             yield return null; // carving 해제 2프레임 대기
-            if (IsDead) yield break;
+            if (IsDead)
+            {
+                // Die()에서 EnterObstacleMode()를 호출했을 수 있으므로 상태 재정비
+                isObstacleMode = true;
+                obstacle.enabled = true;
+                yield break;
+            }
             agent.enabled = true;
             isObstacleMode = false;
         }

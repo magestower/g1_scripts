@@ -29,11 +29,14 @@ namespace G1
         {
             shadowRenderer = GetComponentInChildren<Renderer>();
 
-            if (shadowRenderer != null)
+            if (shadowRenderer == null)
             {
-                propBlock = new MaterialPropertyBlock();
-                shadowRenderer.GetPropertyBlock(propBlock);
+                Debug.LogWarning("[BlobShadowFollower] 자식 Renderer를 찾을 수 없습니다.", this);
+                return;
             }
+
+            propBlock = new MaterialPropertyBlock();
+            shadowRenderer.GetPropertyBlock(propBlock);
 
             if (characterTransform == null)
                 characterTransform = transform.parent;   // 자동으로 부모(마루) 찾기

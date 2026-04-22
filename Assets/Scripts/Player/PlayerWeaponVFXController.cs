@@ -123,11 +123,14 @@ namespace G1
 				return;
 			}
 
-			// 프로필 수치 기반 위치 보정 계산
-			Vector3 effectPos = rightHandBone.position
-				+ characterTransform.right   * profileEntry.positionOffset.x
-				+ characterTransform.up      * profileEntry.positionOffset.y
-				+ characterTransform.forward * profileEntry.positionOffset.z;
+			// 프로필 수치 기반 위치 보정 계산 (characterTransform null 시 rightHandBone 위치 그대로 사용)
+			Vector3 effectPos = rightHandBone.position;
+			if (characterTransform != null)
+			{
+				effectPos += characterTransform.right   * profileEntry.positionOffset.x
+				           + characterTransform.up      * profileEntry.positionOffset.y
+				           + characterTransform.forward * profileEntry.positionOffset.z;
+			}
 
 			PlaySlashParticle(particle, profileEntry, effectPos);
 		}
