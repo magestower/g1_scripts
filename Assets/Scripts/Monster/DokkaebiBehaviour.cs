@@ -290,7 +290,8 @@ namespace G1
             // 슬롯 이탈 판정 — 플레이어 이동으로 슬롯 위치가 크게 갱신된 경우
             if (toSlot.magnitude > DepartThresh)
             {
-                MonsterManager.Instance?.RequestReassign(this); // 내부에서 OnSlotChanged() → atSlot = false
+                if (MonsterManager.Instance != null)
+                    MonsterManager.Instance.RequestReassign(this); // 내부에서 OnSlotChanged() → atSlot = false
                 return;
             }
 

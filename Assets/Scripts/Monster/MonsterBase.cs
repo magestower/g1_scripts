@@ -23,6 +23,12 @@ namespace G1
         [Header("체력")]
         [SerializeField] protected int maxHealth = 30;
 
+        [Header("사운드")]
+        /// <summary>피격 시 재생할 사운드 클립 목록. 매 피격마다 무작위로 하나를 선택한다.</summary>
+        [SerializeField] private AudioClip[] hitSounds;
+        /// <summary>사망 시 재생할 사운드 클립</summary>
+        [SerializeField] private AudioClip deathSound;
+
         [Header("사망 처리")]
         /// <summary>사망 애니메이션 재생 후 풀에 반납하기까지 대기 시간 (초)</summary>
         [SerializeField] private float releaseDelay = 3f;
@@ -140,13 +146,21 @@ namespace G1
             // 피격 플래시 이펙트 재생
             hitFlasher?.Flash();
             // 피격 히트스탑
-            HitStop.Instance?.Trigger();
+            if (HitStop.Instance != null) HitStop.Instance.Trigger();
             // 피격 스파크 이펙트
-            HitSparkPool.Instance?.Show(GetPopupSpawnPos());
+            if (HitSparkPool.Instance != null) HitSparkPool.Instance.Show(GetPopupSpawnPos());
+            // 피격 사운드 재생 (목록 중 무작위 선택)
+            if (hitSounds != null && hitSounds.Length > 0)
+            {
+                AudioClip clip = hitSounds[Random.Range(0, hitSounds.Length)];
+                if (SoundManager.Instance != null)
+                    SoundManager.Instance.Play(clip, GetPopupSpawnPos());
+            }
 
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
             // 피해량 수치를 화면에 표시
-            DamagePopupPool.Instance?.Show(damage, GetPopupSpawnPos(), isCritical);
+            if (DamagePopupPool.Instance != null)
+                DamagePopupPool.Instance.Show(damage, GetPopupSpawnPos(), isCritical);
 
             if (currentHealth <= 0)
                 Die();
@@ -188,6 +202,9 @@ namespace G1
             IsDead = true;
             animator.SetBool(DeadHash, true);
             col.enabled = false;
+            // 사망 사운드 재생
+            if (deathSound != null && SoundManager.Instance != null)
+                SoundManager.Instance.Play(deathSound, GetPopupSpawnPos(), pitchVariance: 0.05f);
             StartCoroutine(ReleaseAfterDelay());
         }
 
