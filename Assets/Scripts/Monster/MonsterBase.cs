@@ -94,15 +94,15 @@ namespace G1
             if (IsDead) return;
 
             currentHealth -= damage;
+            if (currentHealth <= 0) currentHealth = 0;
 
             // 피격 애니메이션 재생
             animator.SetTrigger(HitHash);
 
+            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+
             if (currentHealth <= 0)
-            {
-                currentHealth = 0;
                 Die();
-            }
         }
 
         // ─────────────────────────────────────────
@@ -126,6 +126,9 @@ namespace G1
 
         /// <summary>몬스터 사망 시 발행되는 이벤트. MonsterManager가 구독해 목록을 갱신한다.</summary>
         public static event System.Action<MonsterBase> OnMonsterDied;
+
+        /// <summary>체력이 변경될 때 발행되는 인스턴스 이벤트. MonsterHpBar가 구독해 게이지를 갱신한다.</summary>
+        public event System.Action<int, int> OnHealthChanged;
 
         /// <summary>
         /// 사망 처리: 플래그 설정, 사망 애니메이션 재생, 콜라이더 비활성화.
@@ -187,6 +190,7 @@ namespace G1
             IsDead          = false;
             currentHealth   = maxHealth;
             col.enabled     = true;
+            OnHealthChanged?.Invoke(currentHealth, maxHealth);
             AssignedSlotPos    = Vector3.zero;
             AssignedSlotRadius = 0f;
             AssignedSlotRing   = -1;

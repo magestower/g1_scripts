@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -5,8 +6,9 @@ namespace G1
 {
     /// <summary>
     /// 도깨비 몬스터 AI 컨트롤러.
-    /// Idle → Chase(감지) → Attack(근접) → Dead 상태 머신으로 동작한다.
-    /// NavMeshAgent로 이동하며, MonsterManager가 배정한 슬롯 위치를 목적지로 사용한다.
+    /// Idle → Chase(감지) → SlotWait(ring 1+ 대기) → Attack(근접) → Dead 상태 머신으로 동작한다.
+    /// 정지 상태(SlotWait/Attack)에서는 NavMeshObstacle(carving)을 활성화해 다른 몬스터가 우회하도록 하고,
+    /// 이동 재개 시 1프레임 대기 후 NavMeshAgent를 활성화해 carving 해제 후 스냅 현상을 방지한다.
     /// </summary>
     [RequireComponent(typeof(NavMeshAgent))]
     [RequireComponent(typeof(NavMeshObstacle))]
@@ -15,7 +17,7 @@ namespace G1
         // ─────────────────────────────────────────
         // Animator 파라미터 해시
         // ─────────────────────────────────────────
-        private static readonly int SpeedHash = Animator.StringToHash("Speed");
+        private static readonly int SpeedHash  = Animator.StringToHash("Speed");
         private static readonly int AttackHash = Animator.StringToHash("Attack");
 
         // ─────────────────────────────────────────
@@ -29,7 +31,7 @@ namespace G1
             Idle,
             /// <summary>플레이어 감지, 슬롯/플레이어 방향으로 이동 중</summary>
             Chase,
-            /// <summary>배정된 슬롯에 도착해 Obstacle 모드로 대기 중 (ring 1+)</summary>
+            /// <summary>배정된 슬롯에 도착해 대기 중 (ring 1+)</summary>
             SlotWait,
             /// <summary>공격 범위 내, 공격 중</summary>
             Attack,
@@ -49,7 +51,7 @@ namespace G1
         /// <summary>초당 회전 각도(degree). NavMeshAgent 회전을 무시하고 직접 보간 회전에 사용된다.</summary>
         [SerializeField] private float rotationSpeed = 480f;
         [SerializeField] private float attackCooldown = 2f;
-        [SerializeField] private int attackDamage = 5;
+        [SerializeField] private int   attackDamage = 5;
         /// <summary>공격 애니메이션에서 데미지를 적용할 타이밍 (0~1 정규화 값)</summary>
         [SerializeField] private float hitTimingNormalized = 0.5f;
 
@@ -60,13 +62,16 @@ namespace G1
         // 런타임 상태
         // ─────────────────────────────────────────
 
-        private EnemyState currentState = EnemyState.Idle;
-        private Transform playerTransform;
-        private IDamageable playerDamageable;
-        private NavMeshAgent agent;
+        private EnemyState   currentState = EnemyState.Idle;
+        private Transform    playerTransform;
+        private IDamageable  playerDamageable;
+        private NavMeshAgent    agent;
         private NavMeshObstacle obstacle;
+        private MonsterHpBar    hpBar;
         private float lastAttackTime = NeverAttacked;
-        private bool atSlot;
+        private bool  atSlot;
+        /// <summary>현재 obstacle(정지) 모드인지 여부. 중복 전환 방지에 사용한다.</summary>
+        private bool  isObstacleMode = false;
 
         // 부동소수점 이동 연산 오차 허용 범위
         private const float DistanceTolerance = 0.10f;
@@ -80,23 +85,26 @@ namespace G1
         // ─────────────────────────────────────────
 
         /// <summary>
-        /// NavMeshAgent와 플레이어 트랜스폼을 캐싱한다.
+        /// NavMeshAgent/NavMeshObstacle과 플레이어 트랜스폼을 캐싱한다.
         /// NavMeshAgent 회전은 RotateToward()로 직접 제어하므로 angularSpeed를 0으로 설정한다.
+        /// 초기 상태는 Agent 활성 / Obstacle 비활성으로 시작한다.
         /// </summary>
         protected override void Awake()
         {
             base.Awake();
 
             agent = GetComponent<NavMeshAgent>();
-            agent.speed = moveSpeed;
-            agent.angularSpeed = 0f;   // 회전은 RotateToward()로 직접 처리
-            agent.acceleration = 999f; // 즉각 가속으로 이동 반응성 확보
-            agent.autoBraking = false;
+            agent.speed            = moveSpeed;
+            agent.angularSpeed     = 0f;   // 회전은 RotateToward()로 직접 처리
+            agent.acceleration     = 999f; // 즉각 가속으로 이동 반응성 확보
+            agent.autoBraking      = false;
             agent.stoppingDistance = 0f;
 
-            obstacle = GetComponent<NavMeshObstacle>();
-            obstacle.carving = false; // carving 비활성 고정 — 활성화 시 NavMesh 비동기 갱신으로 Agent 재활성 때 위치 스냅 발생
-            obstacle.enabled = false; // 초기에는 Agent가 이동을 담당
+            obstacle         = GetComponent<NavMeshObstacle>();
+            obstacle.carving = true;
+            obstacle.enabled = false; // 초기에는 Agent 모드
+
+            hpBar = GetComponentInChildren<MonsterHpBar>(includeInactive: true);
 
             GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
             if (playerObj != null)
@@ -126,8 +134,8 @@ namespace G1
 
         /// <summary>
         /// 수평 거리에 따라 현재 상태를 전이한다.
-        /// ring 0 몬스터는 슬롯 도착 후에도 attackRadius 안까지 추가 접근한다.
-        /// ring 1+ 몬스터는 슬롯 도착 시 그 자리에서 대기한다.
+        /// 정지(SlotWait/Attack) 진입 시 Obstacle 모드로 전환해 다른 몬스터가 carving으로 우회하고,
+        /// 이동(Chase/Idle) 복귀 시 1프레임 대기 후 Agent를 재활성화해 스냅 현상을 방지한다.
         /// </summary>
         /// <param name="flatDist">플레이어까지의 수평(XZ) 거리</param>
         private void UpdateState(float flatDist)
@@ -141,34 +149,37 @@ namespace G1
             // Chase 유지 조건: 슬롯 미배정 / 슬롯 미도착 / ring 0 추가 접근 중
             bool slotReachable = !hasSlot || !atSlot || needsApproach;
 
+            EnemyState prev = currentState;
+
             if (flatDist <= attackRadius + DistanceTolerance && !slotReachable)
             {
-                // Attack 진입: Obstacle ON으로 자리 확보
-                if (!obstacle.enabled)
-                    SetObstacleMode(true);
                 currentState = EnemyState.Attack;
             }
             else if (flatDist > detectRadius)
             {
-                // 감지 범위 이탈: Obstacle 해제 후 Idle
-                if (obstacle.enabled)
-                    SetObstacleMode(false);
-                atSlot = false;
+                atSlot       = false;
                 currentState = EnemyState.Idle;
             }
             else if (atSlot && AssignedSlotRing > 0)
             {
-                // ring 1+가 슬롯에 대기 중: SlotWait 유지 (Obstacle ON은 HandleSlotWait 첫 줄에서 설정)
                 currentState = EnemyState.SlotWait;
             }
             else
             {
-                // 이동 중: Chase — Obstacle 해제 보장 (Attack/SlotWait에서 전환 시 해제)
-                if (obstacle.enabled)
-                    SetObstacleMode(false);
                 if (currentState == EnemyState.Attack)
-                    atSlot = false; // Attack에서 복귀 시 슬롯 재접근
+                    atSlot = false; // Attack 복귀 시 슬롯 재접근
                 currentState = EnemyState.Chase;
+            }
+
+            // 상태 전환 시 Agent ↔ Obstacle 모드 전환
+            if (prev != currentState)
+            {
+                bool shouldWait = currentState == EnemyState.SlotWait
+                               || currentState == EnemyState.Attack;
+                if (shouldWait && !isObstacleMode)
+                    EnterObstacleMode();
+                else if (!shouldWait && isObstacleMode)
+                    StartCoroutine(ExitObstacleModeNextFrame());
             }
         }
 
@@ -179,10 +190,10 @@ namespace G1
         {
             switch (currentState)
             {
-                case EnemyState.Idle: HandleIdle(); break;
-                case EnemyState.Chase: HandleChase(flatDir, flatDist); break;
-                case EnemyState.SlotWait: HandleSlotWait(flatDir); break;
-                case EnemyState.Attack: HandleAttack(flatDir); break;
+                case EnemyState.Idle:     HandleIdle();                   break;
+                case EnemyState.Chase:    HandleChase(flatDir, flatDist); break;
+                case EnemyState.SlotWait: HandleSlotWait(flatDir);        break;
+                case EnemyState.Attack:   HandleAttack(flatDir);          break;
             }
         }
 
@@ -208,36 +219,39 @@ namespace G1
 
         /// <summary>
         /// Chase: NavMeshAgent로 슬롯(또는 플레이어) 방향으로 이동한다.
-        /// 항상 Agent 모드임이 보장된다 (UpdateState에서 Obstacle 해제 후 진입).
         /// ring 0이 슬롯 도착 후에는 플레이어 방향으로 추가 접근한다.
         /// </summary>
         /// <param name="flatDir">플레이어 방향 수평 벡터 (Y=0)</param>
         /// <param name="flatDist">플레이어까지의 수평(XZ) 거리</param>
         private void HandleChase(Vector3 flatDir, float flatDist)
         {
+            // agent 비활성 구간(ExitObstacleModeNextFrame 대기 중)에는 이동/판정 전부 스킵
+            if (!agent.enabled)
+            {
+                animator.SetFloat(SpeedHash, 0f);
+                return;
+            }
+
             if (AssignedSlotRing >= 0)
             {
-                Vector3 toSlot = AssignedSlotPos - transform.position;
-                toSlot.y = 0f;
-                float targetDist = toSlot.magnitude;
+                Vector3 toSlot     = AssignedSlotPos - transform.position;
+                toSlot.y           = 0f;
+                float   targetDist = toSlot.magnitude;
 
                 // 슬롯 도착 판정
                 if (targetDist <= DistanceTolerance && !atSlot)
-                {
                     atSlot = true;
-                    if (AssignedSlotRing != 0)
-                        StopAgent(); // ring 1+: 잔여 경로로 인한 관성 이동 방지
-                    // ring 1+는 다음 프레임 UpdateState에서 SlotWait으로 전환
-                }
 
                 if (atSlot && AssignedSlotRing == 0 && flatDist > attackRadius + DistanceTolerance)
                 {
-                    // ring 0: 슬롯 도착 후 플레이어 방향으로 추가 접근
-                    MoveAgent(playerTransform.position);
+                    // ring 0: 슬롯 도착 후 플레이어에서 attackRadius만큼 떨어진 위치까지 접근
+                    Vector3 toMonster = (transform.position - playerTransform.position);
+                    toMonster.y = 0f;
+                    Vector3 target = playerTransform.position + toMonster.normalized * attackRadius;
+                    MoveAgent(target);
                 }
                 else if (!atSlot)
                 {
-                    // 슬롯을 향해 이동
                     MoveAgent(AssignedSlotPos);
                 }
             }
@@ -247,48 +261,40 @@ namespace G1
                 MoveAgent(playerTransform.position);
             }
 
-            // 이동 방향으로 회전 — velocity 기반, 없으면 플레이어 방향
-            Vector3 vel = agent.enabled ? agent.velocity : Vector3.zero;
+            Vector3 vel = agent.velocity;
             vel.y = 0f;
             RotateToward(vel.sqrMagnitude > 0.01f ? vel : flatDir);
-            bool isMoving = agent.enabled && (vel.magnitude > 0.1f || agent.hasPath || agent.pathPending);
+            bool isMoving = vel.magnitude > 0.1f || agent.hasPath || agent.pathPending;
             animator.SetFloat(SpeedHash, isMoving ? 1f : 0f);
         }
 
         /// <summary>
-        /// SlotWait: ring 1+ 몬스터가 슬롯에 도착해 Obstacle 모드로 대기한다.
-        /// 슬롯이 너무 멀어지면 Obstacle 해제 후 Chase로 재배정한다.
+        /// SlotWait: ring 1+ 몬스터가 슬롯에 도착해 대기한다.
+        /// 슬롯이 너무 멀어지면 Chase로 재배정한다.
         /// </summary>
         /// <param name="flatDir">플레이어 방향 수평 벡터 (Y=0)</param>
         private void HandleSlotWait(Vector3 flatDir)
         {
-            // Obstacle 모드 진입 (중복 호출 방지)
-            if (!obstacle.enabled)
-                SetObstacleMode(true);
-
             Vector3 toSlot = AssignedSlotPos - transform.position;
             toSlot.y = 0f;
 
             // 슬롯 이탈 판정 — 플레이어 이동으로 슬롯 위치가 크게 갱신된 경우
             if (toSlot.magnitude > DepartThresh)
             {
-                SetObstacleMode(false);
                 MonsterManager.Instance?.RequestReassign(this); // 내부에서 OnSlotChanged() → atSlot = false
                 return;
             }
 
-            // 제자리 대기: 플레이어 방향으로 회전만 수행
             RotateToward(flatDir);
             animator.SetFloat(SpeedHash, 0f);
         }
 
         /// <summary>
-        /// Attack: Agent를 정지하고 플레이어 방향으로 회전하며 쿨다운마다 공격한다.
+        /// Attack: 플레이어 방향으로 회전하며 쿨다운마다 공격한다.
         /// </summary>
         /// <param name="flatDir">플레이어 방향 수평 벡터 (Y=0)</param>
         private void HandleAttack(Vector3 flatDir)
         {
-            StopAgent();
             animator.SetFloat(SpeedHash, 0f);
             RotateToward(flatDir);
 
@@ -297,27 +303,51 @@ namespace G1
             if (Time.time - lastAttackTime >= attackCooldown)
             {
                 lastAttackTime = Time.time;
-                animator.ResetTrigger(AttackHash); // 누적 트리거 초기화 후 재설정
+                animator.ResetTrigger(AttackHash);
                 animator.SetTrigger(AttackHash);
             }
         }
 
         /// <summary>
         /// 슬롯이 변경됐을 때 호출된다. atSlot을 리셋해 새 슬롯으로 Chase를 재개한다.
+        /// ring 0 배정 시 HP 바를 표시하고, 그 외에는 숨긴다.
         /// </summary>
         public override void OnSlotChanged()
         {
             atSlot = false;
+            if (hpBar != null) hpBar.SetVisible(AssignedSlotRing == 0);
+        }
+
+        /// <summary>정지 모드: Agent를 비활성화하고 Obstacle(carving)을 활성화한다.</summary>
+        private void EnterObstacleMode()
+        {
+            isObstacleMode  = true;
+            agent.enabled   = false;
+            obstacle.enabled = true;
+        }
+
+        /// <summary>
+        /// 이동 재개 모드: Obstacle을 비활성화하고 2프레임 대기 후 Agent를 활성화한다.
+        /// NavMeshObstacle carving은 비동기로 해제되므로 충분히 대기해야 Agent 활성화 시 스냅이 없다.
+        /// </summary>
+        private IEnumerator ExitObstacleModeNextFrame()
+        {
+            obstacle.enabled = false;
+            yield return null;
+            yield return null; // carving 해제 2프레임 대기
+            if (IsDead) yield break;
+            agent.enabled  = true;
+            isObstacleMode = false;
         }
 
         /// <inheritdoc/>
-        public override int NavMeshPriority => agent != null ? agent.avoidancePriority : 99;
+        public override int NavMeshPriority => agent != null && agent.enabled ? agent.avoidancePriority : 99;
 
         /// <summary>NavMeshAgent의 회피 우선순위를 설정한다.</summary>
         /// <param name="priority">0(최고) ~ 99(최저)</param>
         public override void SetAvoidancePriority(int priority)
         {
-            if (agent is not null)
+            if (agent != null)
                 agent.avoidancePriority = priority;
         }
 
@@ -325,7 +355,7 @@ namespace G1
         /// <param name="destination">목적지 월드 좌표</param>
         private void MoveAgent(Vector3 destination)
         {
-            if (!agent.isOnNavMesh) return;
+            if (!agent.enabled || !agent.isOnNavMesh) return;
             agent.isStopped = false;
             agent.SetDestination(destination);
         }
@@ -335,26 +365,7 @@ namespace G1
         {
             if (!agent.enabled || !agent.isOnNavMesh) return;
             agent.isStopped = true;
-            agent.velocity = Vector3.zero;
-        }
-
-        /// <summary>
-        /// 정지 대기 시 NavMeshObstacle을 활성화해 다른 몬스터의 경로 계산에 장애물로 등록한다.
-        /// NavMeshAgent와 NavMeshObstacle은 동시에 활성화할 수 없으므로 교대로 토글한다.
-        /// </summary>
-        /// <param name="isObstacle">true: Obstacle 활성 / Agent 비활성, false: Agent 활성 / Obstacle 비활성</param>
-        private void SetObstacleMode(bool isObstacle)
-        {
-            if (isObstacle)
-            {
-                agent.enabled = false;
-                obstacle.enabled = true;
-            }
-            else
-            {
-                obstacle.enabled = false;
-                agent.enabled = true;
-            }
+            agent.velocity  = Vector3.zero;
         }
 
         // ─────────────────────────────────────────
@@ -380,28 +391,32 @@ namespace G1
         // 사망 처리 override
         // ─────────────────────────────────────────
 
-        /// <summary>사망 시 Obstacle 모드를 해제하고 Agent를 정지한 뒤 AI 상태를 Dead로 전환한다.</summary>
+        /// <summary>사망 시 Agent를 정지하고 AI 상태를 Dead로 전환한다.</summary>
         protected override void Die()
         {
             base.Die();
             currentState = EnemyState.Dead;
-            SetObstacleMode(false); // Obstacle 모드 중 사망 시 Agent 복귀 후 정지
             StopAgent();
+            // 코루틴 없이 즉시 Obstacle로 전환 (사망이므로 스냅 문제 없음)
+            if (!isObstacleMode) EnterObstacleMode();
         }
 
-        /// <summary>풀에서 재사용될 때 AI 상태와 Agent를 초기화한다.</summary>
+        /// <summary>풀에서 재사용될 때 AI 상태와 Agent/Obstacle을 초기화한다.</summary>
         public override void ResetState()
         {
             base.ResetState();
-            currentState = EnemyState.Idle;
+            currentState   = EnemyState.Idle;
             lastAttackTime = NeverAttacked;
-            atSlot = false;
-            // Awake보다 ResetState가 먼저 호출될 수 있으므로 null이면 재캐싱
-            if (agent == null) agent = GetComponent<NavMeshAgent>();
-            if (obstacle == null) obstacle = GetComponent<NavMeshObstacle>();
-            SetObstacleMode(false); // 풀 반납 후 재사용 시 Agent 모드로 복귀
+            atSlot         = false;
+            isObstacleMode = false;
+            if (hpBar     != null) hpBar.SetVisible(false);
+            if (obstacle  == null) obstacle = GetComponent<NavMeshObstacle>();
+            if (agent     == null) agent    = GetComponent<NavMeshAgent>();
+            // Obstacle 비활성 → Agent 활성 상태로 복원
+            if (obstacle != null) obstacle.enabled = false;
+            if (agent    != null) agent.enabled    = true;
             StopAgent();
-            if (agent != null && agent.isOnNavMesh)
+            if (agent != null && agent.enabled && agent.isOnNavMesh)
                 agent.ResetPath();
         }
 
@@ -416,6 +431,18 @@ namespace G1
 
             Gizmos.color = Color.red;
             Gizmos.DrawWireSphere(transform.position, attackRadius);
+
+            // 배정된 슬롯 위치 (파란색 구)
+            Gizmos.color = Color.blue;
+            Gizmos.DrawWireSphere(AssignedSlotPos, 0.15f);
+
+            // 슬롯까지 선
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawLine(transform.position, AssignedSlotPos);
+
+            // 실제 ColliderRadius 표시
+            Gizmos.color = Color.white;
+            Gizmos.DrawWireSphere(transform.position, ColliderRadius);
         }
 #endif
     }
