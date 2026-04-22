@@ -20,7 +20,7 @@ namespace G1
 
         private Coroutine stopCoroutine;
 
-        /// <summary>싱글톤 인스턴스를 설정한다.</summary>
+        /// <summary>싱글톤 인스턴스를 설정한다. 씬 전환 후에도 유지되도록 DontDestroyOnLoad를 적용한다.</summary>
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -29,6 +29,7 @@ namespace G1
                 return;
             }
             Instance = this;
+            DontDestroyOnLoad(gameObject);
         }
 
         /// <summary>

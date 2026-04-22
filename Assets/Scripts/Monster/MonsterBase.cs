@@ -197,7 +197,8 @@ namespace G1
         /// </summary>
         private IEnumerator ReleaseAfterDelay()
         {
-            yield return new WaitForSeconds(releaseDelay);
+            // WaitForSecondsRealtime 사용: HitStop이 timeScale을 조작해도 사망 반납 타이밍이 늘어나지 않도록 보장
+            yield return new WaitForSecondsRealtime(releaseDelay);
 
             OnMonsterDied?.Invoke(this);
 

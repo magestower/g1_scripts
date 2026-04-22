@@ -20,7 +20,7 @@ namespace G1
 
         private readonly Stack<DamagePopup> pool = new();
 
-        /// <summary>싱글톤을 설정하고 풀을 미리 채운다.</summary>
+        /// <summary>싱글톤을 설정하고 풀을 미리 채운다. 씬 전환 후에도 유지되도록 DontDestroyOnLoad를 적용한다.</summary>
         private void Awake()
         {
             // 중복 인스턴스 방지
@@ -30,6 +30,7 @@ namespace G1
                 return;
             }
             Instance = this;
+            DontDestroyOnLoad(gameObject);
 
             // 풀 미리 채우기
             for (int i = 0; i < prewarmSize; i++)

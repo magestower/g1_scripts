@@ -22,7 +22,7 @@ namespace G1
 
         private readonly Stack<CFXR_Effect> pool = new();
 
-        /// <summary>싱글톤을 설정하고 풀을 미리 채운다.</summary>
+        /// <summary>싱글톤을 설정하고 풀을 미리 채운다. 씬 전환 후에도 유지되도록 DontDestroyOnLoad를 적용한다.</summary>
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -31,6 +31,7 @@ namespace G1
                 return;
             }
             Instance = this;
+            DontDestroyOnLoad(gameObject);
 
             for (int i = 0; i < prewarmSize; i++)
                 pool.Push(CreateInstance());

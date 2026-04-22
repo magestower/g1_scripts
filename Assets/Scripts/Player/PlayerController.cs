@@ -568,7 +568,8 @@ namespace G1
 
         private IEnumerator ResumeMovement()
         {
-            yield return new WaitForSeconds(moveResumeDelay);
+            // WaitForSecondsRealtime 사용: HitStop의 timeScale 조작 중에도 딜레이가 늘어나지 않도록 보장
+            yield return new WaitForSecondsRealtime(moveResumeDelay);
             // 사망 상태로 전환된 경우 Idle 복귀 차단
             if (!IsDead)
                 TransitionTo(PlayerState.Idle);
