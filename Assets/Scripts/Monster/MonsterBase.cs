@@ -14,7 +14,7 @@ namespace G1
         // ─────────────────────────────────────────
         // Animator 파라미터 해시 (GC 최적화)
         // ─────────────────────────────────────────
-        protected static readonly int HitHash  = Animator.StringToHash("Hit");
+        protected static readonly int HitHash = Animator.StringToHash("Hit");
         protected static readonly int DeadHash = Animator.StringToHash("IsDead");
 
         // ─────────────────────────────────────────
@@ -58,6 +58,8 @@ namespace G1
         /// </summary>
         private Transform neckBone;
 
+        private HitFlasher hitFlasher;
+
         /// <summary>현재 체력이 0 이하인지 여부</summary>
         public bool IsDead { get; protected set; }
 
@@ -70,7 +72,7 @@ namespace G1
             get
             {
                 if (col is CapsuleCollider capsule) return capsule.radius;
-                if (col is SphereCollider sphere)  return sphere.radius;
+                if (col is SphereCollider sphere) return sphere.radius;
                 return 0f;
             }
         }
@@ -82,10 +84,11 @@ namespace G1
         /// <summary>컴포넌트 참조를 캐싱하고 초기 체력을 설정한다.</summary>
         protected virtual void Awake()
         {
-            animator      = GetComponent<Animator>();
-            col           = GetComponent<Collider>();
+            animator = GetComponent<Animator>();
+            col = GetComponent<Collider>();
             currentHealth = maxHealth;
-            neckBone      = FindNeckBone(transform);
+            neckBone = FindNeckBone(transform);
+            hitFlasher = GetComponent<HitFlasher>();
         }
 
         /// <summary>
@@ -134,6 +137,12 @@ namespace G1
 
             // 피격 애니메이션 재생
             animator.SetTrigger(HitHash);
+            // 피격 플래시 이펙트 재생
+            hitFlasher?.Flash();
+            // 피격 히트스탑
+            HitStop.Instance?.Trigger();
+            // 피격 스파크 이펙트
+            HitSparkPool.Instance?.Show(GetPopupSpawnPos());
 
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
             // 피해량 수치를 화면에 표시
@@ -225,14 +234,14 @@ namespace G1
             // Awake가 호출되기 전에 ResetState가 실행될 수 있으므로 null이면 재캐싱
             if (col == null) col = GetComponent<Collider>();
             if (animator == null) animator = GetComponent<Animator>();
-            IsDead          = false;
-            currentHealth   = maxHealth;
-            col.enabled     = true;
+            IsDead = false;
+            currentHealth = maxHealth;
+            col.enabled = true;
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
-            AssignedSlotPos    = Vector3.zero;
+            AssignedSlotPos = Vector3.zero;
             AssignedSlotRadius = 0f;
-            AssignedSlotRing   = -1;
-            SeparationVec      = Vector3.zero;
+            AssignedSlotRing = -1;
+            SeparationVec = Vector3.zero;
             animator.SetBool(DeadHash, false);
             animator.ResetTrigger(HitHash);
         }
