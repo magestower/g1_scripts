@@ -58,6 +58,9 @@ namespace G1
         protected Animator animator;
         protected Collider col;
 
+        /// <summary>사망 후 풀 반납을 담당하는 코루틴. ResetState 시 선택적으로 중단하기 위해 보관한다.</summary>
+        private Coroutine releaseCoroutine;
+
         /// <summary>
         /// 데미지 팝업 스폰 기준 위치 (목 본 또는 높이 추정값).
         /// Awake에서 캐싱되며 TakeDamage에서 사용된다.
@@ -205,7 +208,7 @@ namespace G1
             // 사망 사운드 재생
             if (deathSound != null && SoundManager.Instance != null)
                 SoundManager.Instance.Play(deathSound, GetPopupSpawnPos(), pitchVariance: 0.05f);
-            StartCoroutine(ReleaseAfterDelay());
+            releaseCoroutine = StartCoroutine(ReleaseAfterDelay());
         }
 
         /// <summary>
@@ -247,8 +250,12 @@ namespace G1
         /// </summary>
         public virtual void ResetState()
         {
-            // 이전 ReleaseAfterDelay 코루틴이 남아있을 경우 중복 실행 방지
-            StopAllCoroutines();
+            // ReleaseAfterDelay만 중단 — StopAllCoroutines는 HitFlasher 등 다른 코루틴도 끊으므로 사용 금지
+            if (releaseCoroutine != null)
+            {
+                StopCoroutine(releaseCoroutine);
+                releaseCoroutine = null;
+            }
             // Awake가 호출되기 전에 ResetState가 실행될 수 있으므로 null이면 재캐싱
             if (col == null) col = GetComponent<Collider>();
             if (animator == null) animator = GetComponent<Animator>();

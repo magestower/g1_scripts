@@ -22,22 +22,42 @@ namespace G1
         /// <summary>MonsterBase 참조를 캐싱하고 이벤트를 구독한다.</summary>
         private void Awake()
         {
-            monster = GetComponentInParent<MonsterBase>();
             mainCamera = Camera.main;
-
-            if (monster != null)
-                monster.OnHealthChanged += UpdateBar;
 
             // 초기에는 숨김
             if (barRoot != null)
                 barRoot.SetActive(false);
+
+            Subscribe(GetComponentInParent<MonsterBase>());
         }
 
         /// <summary>이벤트 구독을 해제한다.</summary>
         private void OnDestroy()
         {
+            Unsubscribe();
+        }
+
+        /// <summary>
+        /// monster를 교체하며 이벤트 구독을 갱신한다.
+        /// 풀 재사용 등으로 부모가 바뀔 때 외부에서 호출할 수 있다.
+        /// </summary>
+        /// <param name="newMonster">새로 구독할 MonsterBase. null이면 구독만 해제한다.</param>
+        public void Subscribe(MonsterBase newMonster)
+        {
+            Unsubscribe();
+            monster = newMonster;
             if (monster != null)
+                monster.OnHealthChanged += UpdateBar;
+        }
+
+        /// <summary>현재 구독 중인 이벤트를 해제한다.</summary>
+        private void Unsubscribe()
+        {
+            if (monster != null)
+            {
                 monster.OnHealthChanged -= UpdateBar;
+                monster = null;
+            }
         }
 
         /// <summary>매 프레임 카메라를 향해 빌보드 회전한다.</summary>

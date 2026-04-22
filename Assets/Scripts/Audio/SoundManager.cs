@@ -74,7 +74,9 @@ namespace G1
         private System.Collections.IEnumerator ReleaseWhenDone(AudioSource source)
         {
             // clip 길이만큼 실제 시간 기준으로 대기 (HitStop timeScale 영향 배제)
-            yield return new WaitForSecondsRealtime(source.clip.length / Mathf.Max(0.01f, source.pitch));
+            // pitch를 0.5~2 범위로 클램프해 극단적 pitchVariance 입력 시 대기 시간 폭발 방지
+            float safePitch = Mathf.Clamp(source.pitch, 0.5f, 2f);
+            yield return new WaitForSecondsRealtime(source.clip.length / safePitch);
             source.Stop();
             source.clip = null;
             source.gameObject.SetActive(false);
