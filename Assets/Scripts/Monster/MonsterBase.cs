@@ -78,6 +78,7 @@ namespace G1
         private Transform neckBone;
 
         private HitFlasher hitFlasher;
+        private MonsterDissolve monsterDissolve;
 
         /// <summary>현재 체력이 0 이하인지 여부</summary>
         public bool IsDead { get; protected set; }
@@ -108,6 +109,7 @@ namespace G1
             currentHealth = maxHealth;
             neckBone = FindNeckBone(transform);
             hitFlasher = GetComponent<HitFlasher>();
+            monsterDissolve = GetComponent<MonsterDissolve>();
         }
 
         /// <summary>
@@ -215,6 +217,8 @@ namespace G1
             // 쓰러지는 사운드는 deathDownDelay 후 재생 (releaseDelay를 초과하지 않도록 클램프)
             if (deathDownSound != null)
                 deathDownCoroutine = StartCoroutine(PlayDeathDownAfterDelay(Mathf.Min(deathDownDelay, releaseDelay - 0.05f)));
+            // 디졸브 연출 시작
+            monsterDissolve?.StartDissolve();
             releaseCoroutine = StartCoroutine(ReleaseAfterDelay());
         }
 
@@ -290,6 +294,8 @@ namespace G1
             SeparationVec = Vector3.zero;
             animator.SetBool(DeadHash, false);
             animator.ResetTrigger(HitHash);
+            // 디졸브 중단 및 원본 머티리얼 복원
+            monsterDissolve?.ResetDissolve();
         }
     }
 }

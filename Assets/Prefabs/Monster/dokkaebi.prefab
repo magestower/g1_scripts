@@ -696,6 +696,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 0871a8ee7030df84b88d820680241a85, type: 3}
       insertIndex: -1
       addedObject: {fileID: 3981543063747506443}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 0871a8ee7030df84b88d820680241a85, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4430238969571854051}
   m_SourcePrefab: {fileID: 100100000, guid: 0871a8ee7030df84b88d820680241a85, type: 3}
 --- !u!4 &2521128369728866233 stripped
 Transform:
@@ -744,8 +747,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::G1.DokkaebiBehaviour
   maxHealth: 30
   deathSound: {fileID: 8300000, guid: 91a9b2c92c93c764f8b50cb4c1712e07, type: 3}
-  thudSound: {fileID: 8300000, guid: 3d132da7af60f1145a3deb6a8bc42a08, type: 3}
-  thudDelay: 0.6
+  deathDownSound: {fileID: 8300000, guid: 001f691d110d55648871a03f446ffa08, type: 3}
+  deathDownDelay: 0.8
   releaseDelay: 3
   detectRadius: 8
   attackRadius: 0.7
@@ -806,6 +809,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::G1.HitFlasher
   flashColor: {r: 0.7433963, g: 0.52037734, b: 0.52037734, a: 1}
   flashDuration: 0.25
+--- !u!114 &4430238969571854051
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4765358315009404139}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e205b571ba322742977a4f5a799fc1d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::G1.MonsterDissolve
+  dissolveMaterialTemplate: {fileID: 2100000, guid: 773fcb3cc248157438c7a37386db1486, type: 2}
+  dissolveDuration: 1.5
+  dissolveDelay: 0.8
 --- !u!4 &5290080909488731729 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 0871a8ee7030df84b88d820680241a85, type: 3}

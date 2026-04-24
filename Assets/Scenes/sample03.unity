@@ -1043,7 +1043,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 59b90450157252a4ab5d916f9f9fa341, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::G1.HitSparkPool
-  sparkPrefab: {fileID: 3344661427901410112, guid: ed0d4361189bfb743ba2b0d8bbece39a, type: 3}
+  sparkPrefab: {fileID: 4794118294690565690, guid: 66c64a3760424924e8879c3d795431b9, type: 3}
   prewarmSize: 8
 --- !u!4 &1159889323
 Transform:
@@ -2431,6 +2431,26 @@ PrefabInstance:
       propertyPath: maxHealth
       value: 1000
       objectReference: {fileID: 0}
+    - target: {fileID: 8860590044858608056, guid: 0e192fc34948efb4fb974f1cc57c8469, type: 3}
+      propertyPath: deathSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 5d72ee7fecf3d4c479e4f2b39d511f96, type: 3}
+    - target: {fileID: 8860590044858608056, guid: 0e192fc34948efb4fb974f1cc57c8469, type: 3}
+      propertyPath: deathDownDelay
+      value: 0.8
+      objectReference: {fileID: 0}
+    - target: {fileID: 8860590044858608056, guid: 0e192fc34948efb4fb974f1cc57c8469, type: 3}
+      propertyPath: deathDownSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 001f691d110d55648871a03f446ffa08, type: 3}
+    - target: {fileID: 8860590044858608056, guid: 0e192fc34948efb4fb974f1cc57c8469, type: 3}
+      propertyPath: hitSounds.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8860590044858608056, guid: 0e192fc34948efb4fb974f1cc57c8469, type: 3}
+      propertyPath: 'hitSounds.Array.data[0]'
+      value: 
+      objectReference: {fileID: 8300000, guid: a715ddf00ff7f24469c72404e8df85e9, type: 3}
     - target: {fileID: 8894537673237873731, guid: 0e192fc34948efb4fb974f1cc57c8469, type: 3}
       propertyPath: m_Layer
       value: 9

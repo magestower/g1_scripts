@@ -1,28 +1,26 @@
-using System.Collections.Generic;
-using CartoonFX;
 using UnityEngine;
 
 namespace G1
 {
     /// <summary>
-    /// 피격 스파크 이펙트(CFXR)를 관리하는 싱글톤 풀.
+    /// 피격 스파크 이펙트를 관리하는 싱글톤 풀.
     /// MonsterBase.TakeDamage에서 Show()를 호출해 피격 위치에 이펙트를 재생한다.
-    /// CFXR_Effect의 ClearBehavior.Disable을 활용해 재생 완료 시 자동으로 비활성화되며,
-    /// HitSparkDisableNotifier가 OnDisable을 감지해 풀에 반납한다.
+    /// ParticleSystem의 재생 완료를 매 프레임 체크해 자동으로 풀에 반납한다.
     /// </summary>
     public class HitSparkPool : MonoBehaviour
     {
         public static HitSparkPool Instance { get; private set; }
 
-        /// <summary>사용할 CFXR 히트 이펙트 프리팹</summary>
+        /// <summary>사용할 파티클 이펙트 프리팹 (ParticleSystem 컴포넌트 필수)</summary>
         [SerializeField] private GameObject sparkPrefab;
 
         /// <summary>씬 시작 시 미리 생성해둘 이펙트 오브젝트 수</summary>
         [SerializeField] private int prewarmSize = 8;
 
-        private readonly Stack<CFXR_Effect> pool = new();
+        private ParticleSystem[] pool;
+        private int poolSize;
 
-        /// <summary>싱글톤을 설정하고 풀을 미리 채운다. 씬 전환 후에도 유지되도록 DontDestroyOnLoad를 적용한다.</summary>
+        /// <summary>싱글톤을 설정하고 풀을 미리 채운다.</summary>
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -33,8 +31,16 @@ namespace G1
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
+            if (sparkPrefab == null)
+            {
+                Debug.LogError("[HitSparkPool] sparkPrefab이 할당되지 않았습니다.", this);
+                return;
+            }
+
+            pool = new ParticleSystem[prewarmSize];
             for (int i = 0; i < prewarmSize; i++)
-                pool.Push(CreateInstance());
+                pool[i] = CreateInstance();
+            poolSize = prewarmSize;
         }
 
         /// <summary>
@@ -43,63 +49,58 @@ namespace G1
         /// <param name="worldPos">피격 위치 (목 본 기준)</param>
         public void Show(Vector3 worldPos)
         {
-            CFXR_Effect effect = pool.Count > 0 ? pool.Pop() : CreateInstance();
-            effect.transform.position = worldPos;
-            effect.gameObject.SetActive(true);
+            ParticleSystem ps = GetFromPool();
+            ps.transform.position = worldPos;
+            ps.gameObject.SetActive(true);
+            ps.Play();
         }
 
+        // ─────────────────────────────────────────
+        // 내부 처리
+        // ─────────────────────────────────────────
+
         /// <summary>
-        /// HitSparkDisableNotifier에서 OnDisable 감지 시 호출된다.
+        /// 재생이 끝난 파티클을 매 프레임 체크해 비활성화한다.
         /// </summary>
-        /// <param name="effect">반납할 이펙트 오브젝트</param>
-        internal void Release(CFXR_Effect effect)
+        private void Update()
         {
-            pool.Push(effect);
+            if (pool == null) return;
+            for (int i = 0; i < poolSize; i++)
+            {
+                ParticleSystem ps = pool[i];
+                if (ps == null || !ps.gameObject.activeSelf) continue;
+                if (!ps.IsAlive())
+                {
+                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    ps.gameObject.SetActive(false);
+                }
+            }
         }
 
-        /// <summary>
-        /// 새 이펙트 인스턴스를 생성한다.
-        /// ClearBehavior를 Disable로 설정하고, OnDisable 감지용 컴포넌트를 추가한다.
-        /// </summary>
-        private CFXR_Effect CreateInstance()
+        /// <summary>비활성화된 풀 슬롯에서 꺼내거나, 없으면 새 인스턴스를 생성해 반환한다.</summary>
+        private ParticleSystem GetFromPool()
+        {
+            for (int i = 0; i < poolSize; i++)
+                if (pool[i] != null && !pool[i].gameObject.activeSelf)
+                    return pool[i];
+
+            // 풀이 모자라면 동적 확장
+            ParticleSystem newPs = CreateInstance();
+            System.Array.Resize(ref pool, poolSize + 1);
+            pool[poolSize] = newPs;
+            poolSize++;
+            return newPs;
+        }
+
+        /// <summary>새 파티클 인스턴스를 생성하고 비활성화 상태로 반환한다.</summary>
+        private ParticleSystem CreateInstance()
         {
             GameObject go = Instantiate(sparkPrefab, transform);
-            CFXR_Effect effect = go.GetComponent<CFXR_Effect>();
-
-            // 재생 완료 시 Destroy 대신 Disable로 전환해 풀 재사용 가능하게 설정
-            effect.clearBehavior = CFXR_Effect.ClearBehavior.Disable;
-
+            ParticleSystem ps = go.GetComponent<ParticleSystem>();
+            if (ps == null)
+                Debug.LogError("[HitSparkPool] sparkPrefab에 ParticleSystem 컴포넌트가 없습니다.", go);
             go.SetActive(false);
-
-            // SetActive(false) 이후에 Init — prewarm 중 OnDisable이 pool != null 조건을 만족해 이중 반납되는 것을 방지
-            var notifier = go.AddComponent<HitSparkDisableNotifier>();
-            notifier.Init(effect, this);
-
-            return effect;
-        }
-    }
-
-    /// <summary>
-    /// CFXR_Effect가 재생 완료 후 SetActive(false)될 때 HitSparkPool에 반납 신호를 보내는 컴포넌트.
-    /// HitSparkPool.CreateInstance에서 동적으로 추가된다.
-    /// </summary>
-    internal class HitSparkDisableNotifier : MonoBehaviour
-    {
-        private CFXR_Effect effect;
-        private HitSparkPool pool;
-
-        /// <summary>감지 대상 이펙트와 반납할 풀을 설정한다.</summary>
-        public void Init(CFXR_Effect effect, HitSparkPool pool)
-        {
-            this.effect = effect;
-            this.pool   = pool;
-        }
-
-        /// <summary>오브젝트 비활성화 시 풀에 반납한다. prewarm 초기화 시 호출을 막기 위해 pool null 체크.</summary>
-        private void OnDisable()
-        {
-            if (pool != null && effect != null)
-                pool.Release(effect);
+            return ps;
         }
     }
 }
