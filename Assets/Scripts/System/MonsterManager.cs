@@ -172,7 +172,11 @@ namespace G1
 
             // Priority 발급 — 풀이 고갈되면 기본값(99) 유지
             if (priorityPool.Count > 0)
-                monster.SetAvoidancePriority(priorityPool.Dequeue());
+            {
+                int p = priorityPool.Dequeue();
+                monster.AssignedPriority = p;
+                monster.SetAvoidancePriority(p);
+            }
         }
 
         /// <summary>
@@ -200,12 +204,11 @@ namespace G1
             activeMonsters.Remove(monster);
             ReleaseSlot(monster);
 
-            // Priority 반납 — 99는 미발급(기본값)이므로 풀에 반납하지 않음
-            if (monsterSlotMap.TryGetValue(monster, out _))
+            // Priority 반납 — AssignedPriority로 추적해 Agent 비활성 시 누수 방지
+            if (monster.AssignedPriority >= 0)
             {
-                int p = monster.NavMeshPriority;
-                if (p != 99)
-                    priorityPool.Enqueue(p);
+                priorityPool.Enqueue(monster.AssignedPriority);
+                monster.AssignedPriority = -1;
             }
 
             monsterSlotMap.Remove(monster);

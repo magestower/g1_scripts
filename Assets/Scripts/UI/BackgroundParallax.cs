@@ -66,8 +66,9 @@ namespace G1
         /// </summary>
         private void Start()
         {
-            if (character != null)
-                lastCharacterPosition = character.position;
+            // character가 null이어도 lastCharacterPosition을 현재 위치로 초기화해
+            // 이후 character가 설정될 때 delta 오차로 배경이 순간 이동하는 것을 방지
+            lastCharacterPosition = character != null ? character.position : Vector3.zero;
 
             CacheMoveBounds();
 

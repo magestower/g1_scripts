@@ -3,6 +3,10 @@
 
 namespace G1
 {
+    /// <summary>
+    /// 캐릭터 발 아래 바닥에 Raycast로 blob 그림자를 붙이는 컴포넌트.
+    /// 바닥이 없으면 그림자를 숨기고, 거리에 따라 투명도를 조절한다.
+    /// </summary>
     public class BlobShadowFollower : MonoBehaviour
     {
         [Header("설정")]
@@ -25,7 +29,8 @@ namespace G1
         private Renderer shadowRenderer;
         private MaterialPropertyBlock propBlock;   // Draw Call 최적화용
 
-        void Start()
+        /// <summary>Renderer와 MaterialPropertyBlock을 캐싱하고 characterTransform 미할당 시 부모로 대체한다.</summary>
+        private void Start()
         {
             shadowRenderer = GetComponentInChildren<Renderer>();
 
@@ -42,7 +47,8 @@ namespace G1
                 characterTransform = transform.parent;   // 자동으로 부모(마루) 찾기
         }
 
-        void LateUpdate()   // 카메라 이동 후에 실행되도록 LateUpdate 사용
+        /// <summary>카메라 이동 후 그림자 위치를 갱신한다. Raycast로 바닥을 찾아 위치/투명도를 적용한다.</summary>
+        private void LateUpdate()
         {
             if (characterTransform == null || shadowRenderer == null)
                 return;

@@ -11,8 +11,8 @@ namespace G1
         private PlayerController player;
         private PlayerWeaponVFXController weaponVFX;
 
-        private bool hasHit;            // 히트 판정 중복 호출 방지 플래그
-        private bool hasPlayedEffect;   // 슬래시 이펙트 중복 발동 방지 플래그
+        private bool hasHit;          // 히트 판정 중복 호출 방지 플래그
+        private bool hasPlayedEffect; // 슬래시 이펙트 + 휘두르기 사운드 중복 발동 방지 플래그
 
         /// <summary>
         /// 애니메이션 상태 진입 시 1회 호출됩니다.
@@ -58,19 +58,23 @@ namespace G1
             // normalizedTime을 0~1 범위로 정규화 (루프 애니메이션 대응)
             float progress = stateInfo.normalizedTime % 1f;
 
-            // 지정된 진행률 시점에 슬래시 이펙트 발동 (1회만)
+            // 지정된 진행률 시점에 슬래시 이펙트 + 휘두르기 사운드 발동 (1회만)
             // TODO: VFX 임시 비활성화 — 추후 복원 예정
             if (!hasPlayedEffect && progress >= data.effectTriggerNormalized)
             {
                 // if (weaponVFX != null)
                 //     weaponVFX.PlayEffect(player.CurrentWeaponType);
+                if (data.swingSound != null && SoundManager.Instance != null)
+                    SoundManager.Instance.Play(data.swingSound, player.transform.position, pitchVariance: 0.05f);
                 hasPlayedEffect = true;
             }
 
-            // 지정된 진행률 시점에 히트 판정 (1회만)
+            // 지정된 진행률 시점에 히트 판정 (1회만), 실제 명중 시에만 타격 사운드 재생
             if (!hasHit && progress >= data.hitTimingNormalized)
             {
-                player.OnAttackHit(data.damage);
+                bool landed = player.OnAttackHit(data.damage);
+                if (landed && data.hitSound != null && SoundManager.Instance != null)
+                    SoundManager.Instance.Play(data.hitSound, player.transform.position, pitchVariance: 0.1f);
                 hasHit = true;
             }
         }

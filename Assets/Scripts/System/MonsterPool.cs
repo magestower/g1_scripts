@@ -91,8 +91,9 @@ namespace G1
 
             monster.PrefabID = prefab.GetEntityId(); // 풀 재사용 시에도 ID 보장
             monster.transform.SetPositionAndRotation(position, rotation);
-            monster.gameObject.SetActive(true);
+            // ResetState를 SetActive(true) 이전에 호출해 OnEnable 구독 시점에 상태가 이미 초기화되도록 보장
             monster.ResetState();
+            monster.gameObject.SetActive(true);
             return monster;
         }
 

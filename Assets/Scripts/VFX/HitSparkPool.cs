@@ -69,11 +69,12 @@ namespace G1
             // 재생 완료 시 Destroy 대신 Disable로 전환해 풀 재사용 가능하게 설정
             effect.clearBehavior = CFXR_Effect.ClearBehavior.Disable;
 
-            // OnDisable 감지 후 풀 반납을 위한 노티파이어 추가
+            go.SetActive(false);
+
+            // SetActive(false) 이후에 Init — prewarm 중 OnDisable이 pool != null 조건을 만족해 이중 반납되는 것을 방지
             var notifier = go.AddComponent<HitSparkDisableNotifier>();
             notifier.Init(effect, this);
 
-            go.SetActive(false);
             return effect;
         }
     }

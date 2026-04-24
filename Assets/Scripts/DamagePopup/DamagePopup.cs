@@ -43,6 +43,7 @@ namespace G1
 
         /// <summary>이 팝업 전용 Material 인스턴스. Awake에서 1회 생성해 이후 재사용한다.</summary>
         private Material matInstance;
+        private Coroutine animateCoroutine;
 
         /// <summary>Camera.main 참조를 캐싱하고 전용 Material 인스턴스를 생성한다.</summary>
         private void Awake()
@@ -65,9 +66,10 @@ namespace G1
                 Destroy(matInstance);
         }
 
-        /// <summary>매 프레임 카메라를 향해 빌보드 회전한다.</summary>
+        /// <summary>매 프레임 카메라를 향해 빌보드 회전한다. 카메라 참조가 stale이면 재캐싱한다.</summary>
         private void LateUpdate()
         {
+            if (mainCamera == null) mainCamera = Camera.main;
             if (mainCamera == null) return;
             transform.rotation = mainCamera.transform.rotation;
         }
@@ -84,7 +86,11 @@ namespace G1
             if (label == null) { onComplete?.Invoke(); return; }
 
             // 이전 코루틴이 남아있으면 중단하고 새로 시작
-            StopAllCoroutines();
+            if (animateCoroutine != null)
+            {
+                StopCoroutine(animateCoroutine);
+                animateCoroutine = null;
+            }
 
             transform.position = worldPos;
             label.text = damage.ToString();
@@ -104,7 +110,7 @@ namespace G1
             }
 
             // label.color가 확정된 시점에 baseColor를 캡처해 코루틴에 전달
-            StartCoroutine(AnimateCoroutine(label.color, onComplete));
+            animateCoroutine = StartCoroutine(AnimateCoroutine(label.color, onComplete));
         }
 
         /// <summary>

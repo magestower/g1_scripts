@@ -24,10 +24,12 @@ namespace G1
         [SerializeField] protected int maxHealth = 30;
 
         [Header("사운드")]
-        /// <summary>피격 시 재생할 사운드 클립 목록. 매 피격마다 무작위로 하나를 선택한다.</summary>
-        [SerializeField] private AudioClip[] hitSounds;
-        /// <summary>사망 시 재생할 사운드 클립</summary>
+        /// <summary>사망 시 즉시 재생할 사운드 클립 (단말마)</summary>
         [SerializeField] private AudioClip deathSound;
+        /// <summary>바닥에 쓰러질 때 재생할 사운드 클립 (털썩)</summary>
+        [SerializeField] private AudioClip deathDownSound;
+        /// <summary>deathSound 재생 후 deathDownSound까지의 딜레이 (초)</summary>
+        [SerializeField] private float deathDownDelay = 0.8f;
 
         [Header("사망 처리")]
         /// <summary>사망 애니메이션 재생 후 풀에 반납하기까지 대기 시간 (초)</summary>
@@ -51,6 +53,12 @@ namespace G1
         /// <summary>MonsterManager가 배정한 슬롯의 링 번호 (0-based). 미배정 시 -1.</summary>
         [System.NonSerialized] public int AssignedSlotRing = -1;
 
+        /// <summary>
+        /// MonsterManager가 발급한 avoidancePriority 값. 미발급 시 -1.
+        /// NavMeshAgent 활성 여부와 무관하게 반납 시 정확한 값을 보장하기 위해 별도로 추적한다.
+        /// </summary>
+        [System.NonSerialized] public int AssignedPriority = -1;
+
         // ─────────────────────────────────────────
         // 런타임 상태
         // ─────────────────────────────────────────
@@ -60,6 +68,8 @@ namespace G1
 
         /// <summary>사망 후 풀 반납을 담당하는 코루틴. ResetState 시 선택적으로 중단하기 위해 보관한다.</summary>
         private Coroutine releaseCoroutine;
+        /// <summary>쓰러지는 사운드 딜레이 코루틴. ResetState 시 중단해 풀 반납 후 재생을 방지한다.</summary>
+        private Coroutine deathDownCoroutine;
 
         /// <summary>
         /// 데미지 팝업 스폰 기준 위치 (목 본 또는 높이 추정값).
@@ -152,14 +162,6 @@ namespace G1
             if (HitStop.Instance != null) HitStop.Instance.Trigger();
             // 피격 스파크 이펙트
             if (HitSparkPool.Instance != null) HitSparkPool.Instance.Show(GetPopupSpawnPos());
-            // 피격 사운드 재생 (목록 중 무작위 선택)
-            if (hitSounds != null && hitSounds.Length > 0)
-            {
-                AudioClip clip = hitSounds[Random.Range(0, hitSounds.Length)];
-                if (SoundManager.Instance != null)
-                    SoundManager.Instance.Play(clip, GetPopupSpawnPos());
-            }
-
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
             // 피해량 수치를 화면에 표시
             if (DamagePopupPool.Instance != null)
@@ -203,12 +205,25 @@ namespace G1
         protected virtual void Die()
         {
             IsDead = true;
+            // 피격 트리거가 큐에 남아 사망 애니메이션 직전에 피격 애니메이션이 재생되는 것을 방지
+            animator.ResetTrigger(HitHash);
             animator.SetBool(DeadHash, true);
             col.enabled = false;
-            // 사망 사운드 재생
+            // 사망 사운드 즉시 재생 (단말마)
             if (deathSound != null && SoundManager.Instance != null)
                 SoundManager.Instance.Play(deathSound, GetPopupSpawnPos(), pitchVariance: 0.05f);
+            // 쓰러지는 사운드는 deathDownDelay 후 재생 (releaseDelay를 초과하지 않도록 클램프)
+            if (deathDownSound != null)
+                deathDownCoroutine = StartCoroutine(PlayDeathDownAfterDelay(Mathf.Min(deathDownDelay, releaseDelay - 0.05f)));
             releaseCoroutine = StartCoroutine(ReleaseAfterDelay());
+        }
+
+        /// <summary>delay 초 후 deathDownSound를 재생한다.</summary>
+        private IEnumerator PlayDeathDownAfterDelay(float delay)
+        {
+            yield return new WaitForSecondsRealtime(delay);
+            if (SoundManager.Instance != null)
+                SoundManager.Instance.Play(deathDownSound, transform.position, pitchVariance: 0.05f);
         }
 
         /// <summary>
@@ -256,6 +271,11 @@ namespace G1
                 StopCoroutine(releaseCoroutine);
                 releaseCoroutine = null;
             }
+            if (deathDownCoroutine != null)
+            {
+                StopCoroutine(deathDownCoroutine);
+                deathDownCoroutine = null;
+            }
             // Awake가 호출되기 전에 ResetState가 실행될 수 있으므로 null이면 재캐싱
             if (col == null) col = GetComponent<Collider>();
             if (animator == null) animator = GetComponent<Animator>();
@@ -266,6 +286,7 @@ namespace G1
             AssignedSlotPos = Vector3.zero;
             AssignedSlotRadius = 0f;
             AssignedSlotRing = -1;
+            AssignedPriority = -1;
             SeparationVec = Vector3.zero;
             animator.SetBool(DeadHash, false);
             animator.ResetTrigger(HitHash);

@@ -19,10 +19,25 @@ namespace G1
         [SerializeField] private float defaultMaxDistance = 20f;
 
         private readonly Stack<AudioSource> pool = new();
+        /// <summary>재생 중인 AudioSource → 코루틴 매핑. 게임오브젝트 비활성화 시 누수 방지용.</summary>
+        private readonly Dictionary<AudioSource, Coroutine> activeCoroutines = new();
 
         // ─────────────────────────────────────────
         // Unity 이벤트
         // ─────────────────────────────────────────
+
+        /// <summary>
+        /// 게임 시작 시 SoundManager 인스턴스가 없으면 자동으로 생성한다.
+        /// 씬에 수동 배치 없이도 첫 호출 전에 항상 존재가 보장된다.
+        /// </summary>
+        // AfterSceneLoad: Awake가 먼저 실행되므로 씬 수동 배치 오브젝트가 있으면 Instance가 이미 설정됨
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void CreateIfAbsent()
+        {
+            if (Instance != null) return;
+            GameObject go = new("SoundManager");
+            go.AddComponent<SoundManager>();
+        }
 
         /// <summary>싱글톤을 설정하고 AudioSource 풀을 미리 채운다. 씬 전환 후에도 유지된다.</summary>
         private void Awake()
@@ -37,6 +52,23 @@ namespace G1
 
             for (int i = 0; i < prewarmSize; i++)
                 pool.Push(CreateSource());
+        }
+
+        /// <summary>
+        /// 게임오브젝트 비활성화 시 진행 중인 코루틴을 모두 명시적으로 중단하고
+        /// 해당 AudioSource를 풀에 반납해 누수를 방지한다.
+        /// </summary>
+        private void OnDisable()
+        {
+            foreach (var (source, coroutine) in activeCoroutines)
+            {
+                if (coroutine != null) StopCoroutine(coroutine);
+                source.Stop();
+                source.clip = null;
+                source.gameObject.SetActive(false);
+                pool.Push(source);
+            }
+            activeCoroutines.Clear();
         }
 
         // ─────────────────────────────────────────
@@ -54,16 +86,21 @@ namespace G1
         {
             if (clip == null) return;
 
+            // pitchVariance를 0~0.9로 제한해 pitch가 음수(역재생)가 되는 경우 방지
+            float safeVariance = Mathf.Clamp(pitchVariance, 0f, 0.9f);
+
             AudioSource source = pool.Count > 0 ? pool.Pop() : CreateSource();
             source.transform.position = worldPos;
             source.clip = clip;
             source.volume = volume;
             // 피치 미세 변주로 반복 재생 시 기계적인 느낌 방지
-            source.pitch = 1f + Random.Range(-pitchVariance, pitchVariance);
+            source.pitch = 1f + Random.Range(-safeVariance, safeVariance);
             source.gameObject.SetActive(true);
             source.Play();
 
-            StartCoroutine(ReleaseWhenDone(source));
+            // 코루틴 참조를 보관해 게임오브젝트 비활성화 시 누수를 추적할 수 있도록 함
+            var coroutine = StartCoroutine(ReleaseWhenDone(source));
+            activeCoroutines[source] = coroutine;
         }
 
         // ─────────────────────────────────────────
@@ -77,6 +114,8 @@ namespace G1
             // pitch를 0.5~2 범위로 클램프해 극단적 pitchVariance 입력 시 대기 시간 폭발 방지
             float safePitch = Mathf.Clamp(source.pitch, 0.5f, 2f);
             yield return new WaitForSecondsRealtime(source.clip.length / safePitch);
+            // OnDisable이 먼저 처리했으면 이미 Remove+Push 완료 → 중복 반납 방지
+            if (!activeCoroutines.Remove(source)) yield break;
             source.Stop();
             source.clip = null;
             source.gameObject.SetActive(false);

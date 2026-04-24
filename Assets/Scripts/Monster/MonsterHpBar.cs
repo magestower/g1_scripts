@@ -60,9 +60,10 @@ namespace G1
             }
         }
 
-        /// <summary>매 프레임 카메라를 향해 빌보드 회전한다.</summary>
+        /// <summary>매 프레임 카메라를 향해 빌보드 회전한다. 카메라 참조가 stale이면 재캐싱한다.</summary>
         private void LateUpdate()
         {
+            if (mainCamera == null) mainCamera = Camera.main;
             if (mainCamera == null) return;
             transform.rotation = mainCamera.transform.rotation;
         }

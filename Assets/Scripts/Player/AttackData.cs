@@ -24,8 +24,23 @@ namespace G1
         /// <summary>이 공격의 기본 데미지</summary>
         public int damage = 10;
 
+        [Header("사운드")]
+        /// <summary>무기를 휘두를 때 재생할 사운드 (effectTriggerNormalized 시점)</summary>
+        public AudioClip swingSound;
+        /// <summary>타격이 명중할 때 재생할 사운드 (hitTimingNormalized 시점)</summary>
+        public AudioClip hitSound;
+
         [Header("이펙트 조건")]
         /// <summary>true이면 isEquipped(장비 장착) 상태일 때만 슬래시 이펙트 발동</summary>
         public bool requiresWeapon = true;
+
+#if UNITY_EDITOR
+        /// <summary>effectTriggerNormalized가 hitTimingNormalized보다 크면 자동으로 클램프한다.</summary>
+        private void OnValidate()
+        {
+            if (effectTriggerNormalized > hitTimingNormalized)
+                effectTriggerNormalized = hitTimingNormalized;
+        }
+#endif
     }
 }

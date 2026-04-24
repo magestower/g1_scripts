@@ -37,7 +37,7 @@ namespace G1
             AnimatorStateInfo stateInfo,
             int layerIndex)
         {
-            if (monster == null || hasHit) return;
+            if (monster == null || hasHit || monster.IsDead) return;
 
             float progress = stateInfo.normalizedTime % 1f;
             if (progress >= monster.HitTimingNormalized)

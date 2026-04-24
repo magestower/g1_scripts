@@ -79,7 +79,6 @@ namespace G1
         /// <summary>공격 타겟 변경 및 플레이어 사망 이벤트 구독</summary>
         private void OnEnable()
         {
-            onAttackTargetChanged = t => LookTarget = t;
             PlayerController.OnAttackTargetChanged += onAttackTargetChanged;
             PlayerController.OnPlayerDead += OnPlayerDead;
         }
@@ -94,6 +93,8 @@ namespace G1
         /// <summary>인스펙터 미할당 시 컴포넌트를 자동 탐색하고 neck.x 본과 자식 본을 캐싱한다.</summary>
         private void Awake()
         {
+            // OnEnable/OnDisable 반복 시 새 람다 생성으로 구독 해제가 실패하는 것을 방지
+            onAttackTargetChanged = t => LookTarget = t;
             if (playerController == null)
                 playerController = GetComponent<PlayerController>();
 

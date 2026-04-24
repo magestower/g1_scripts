@@ -32,6 +32,16 @@ namespace G1
         private int currentHealth;
         private float lastHitTriggerTime = -999f;
 
+        [Header("사운드")]
+        /// <summary>피격 시 재생할 사운드 클립 목록. 매 피격마다 무작위로 하나를 선택한다.</summary>
+        [SerializeField] private AudioClip[] hitSounds;
+        /// <summary>사망 시 즉시 재생할 사운드 클립 (단말마)</summary>
+        [SerializeField] private AudioClip deathSound;
+        /// <summary>바닥에 쓰러질 때 재생할 사운드 클립 (털썩)</summary>
+        [SerializeField] private AudioClip deathDownSound;
+        /// <summary>deathSound 재생 후 deathDownSound까지의 딜레이 (초)</summary>
+        [SerializeField] private float deathDownDelay = 0.6f;
+
         /// <summary>현재 체력이 0 이하인지 여부 — IDamageable 구현, PlayerState.Dead 여부로 판단</summary>
         public bool IsDead => playerState == PlayerState.Dead;
 
@@ -50,6 +60,14 @@ namespace G1
             {
                 lastHitTriggerTime = Time.time;
                 animator.SetTrigger(AnimParam.Hit);
+
+                // 피격 사운드 재생 (목록 중 null 제외 무작위 선택)
+                if (hitSounds != null && hitSounds.Length > 0 && SoundManager.Instance != null)
+                {
+                    AudioClip clip = hitSounds[UnityEngine.Random.Range(0, hitSounds.Length)];
+                    if (clip != null)
+                        SoundManager.Instance.Play(clip, transform.position, pitchVariance: 0.1f);
+                }
             }
 
             if (currentHealth <= 0)
@@ -494,17 +512,23 @@ namespace G1
         /// 히트 판정 발생 시 AttackStateBehaviour에서 호출됩니다.
         /// </summary>
         /// <param name="damage">CurrentAttackData에서 전달된 데미지 값</param>
-        public void OnAttackHit(int damage = 0)
+        /// <returns>한 명 이상의 몬스터에게 실제로 데미지를 적용했으면 true</returns>
+        public bool OnAttackHit(int damage = 0)
         {
             // hitRadius 반경 내 Monster 태그 콜라이더를 탐색해 IDamageable에 데미지 적용
             int count = Physics.OverlapSphereNonAlloc(transform.position, hitRadius, monsterHitBuffer);
+            bool hit = false;
             for (int i = 0; i < count; i++)
             {
                 if (!monsterHitBuffer[i].CompareTag(monsterTag)) continue;
 
                 if (monsterHitBuffer[i].TryGetComponent<IDamageable>(out var damageable))
+                {
                     damageable.TakeDamage(damage);
+                    hit = true;
+                }
             }
+            return hit;
         }
 
         /// <summary>
@@ -547,12 +571,22 @@ namespace G1
                     animator.SetBool(AnimParam.IsDead, true);
                     if (prev == PlayerState.Moving) OnMoveStateChanged?.Invoke(false);
                     if (prev == PlayerState.Attacking) OnAttackStateChanged?.Invoke(false);
+                    // 사망 사운드 즉시 재생 (단말마)
+                    if (deathSound != null && SoundManager.Instance != null)
+                        SoundManager.Instance.Play(deathSound, transform.position, pitchVariance: 0.05f);
+                    // 쓰러지는 사운드 딜레이 재생
+                    if (deathDownSound != null)
+                    {
+                        if (deathDownCoroutine != null) StopCoroutine(deathDownCoroutine);
+                        deathDownCoroutine = StartCoroutine(PlayDeathDownSound());
+                    }
                     OnPlayerDead?.Invoke();
                     break;
             }
         }
 
         private Coroutine resumeMovementCoroutine;
+        private Coroutine deathDownCoroutine;
 
         /// <summary>
         /// 공격 애니메이션 끝에서 호출됩니다.
@@ -573,6 +607,17 @@ namespace G1
             // 사망 상태로 전환된 경우 Idle 복귀 차단
             if (!IsDead)
                 TransitionTo(PlayerState.Idle);
+        }
+
+        /// <summary>
+        /// deathDownDelay 이후 deathDownSound를 재생한다.
+        /// WaitForSecondsRealtime으로 HitStop의 timeScale 영향을 받지 않는다.
+        /// </summary>
+        private IEnumerator PlayDeathDownSound()
+        {
+            yield return new WaitForSecondsRealtime(deathDownDelay);
+            if (SoundManager.Instance != null)
+                SoundManager.Instance.Play(deathDownSound, transform.position, pitchVariance: 0.05f);
         }
     }
 }

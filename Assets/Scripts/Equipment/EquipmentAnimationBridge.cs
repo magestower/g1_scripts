@@ -45,6 +45,14 @@ namespace G1
             _manager.OnUnequipped -= HandleUnequipped;
         }
 
+        /// <summary>파괴 시 구독을 명시적으로 해제한다. OnDisable보다 늦게 호출되므로 파괴 순서 의존성을 제거한다.</summary>
+        private void OnDestroy()
+        {
+            if (_manager == null) return;
+            _manager.OnEquipped   -= HandleEquipped;
+            _manager.OnUnequipped -= HandleUnequipped;
+        }
+
         /// <summary>
         /// 장비 장착 이벤트 처리.
         /// Weapon 슬롯 장착 시 Animator의 IsEquipped를 true로 설정합니다.

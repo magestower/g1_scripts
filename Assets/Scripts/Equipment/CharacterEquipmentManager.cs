@@ -167,7 +167,8 @@ namespace G1
             foreach (EquipmentSlot slot in slots)
                 Unequip(slot);
 
-            Debug.Log("[CharacterEquipmentManager] 모든 장비 해제 완료.");
+            if (slots.Length > 0)
+                Debug.Log("[CharacterEquipmentManager] 모든 장비 해제 완료.");
         }
 
         /// <summary>
@@ -177,7 +178,7 @@ namespace G1
         /// <returns>장착되어 있으면 true</returns>
         public bool IsEquipped(EquipmentSlot slot)
         {
-            return _equippedInstances.ContainsKey(slot) && _equippedInstances[slot] != null;
+            return _equippedInstances.TryGetValue(slot, out GameObject obj) && obj != null;
         }
 
         /// <summary>

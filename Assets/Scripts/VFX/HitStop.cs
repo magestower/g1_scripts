@@ -57,6 +57,17 @@ namespace G1
             stopCoroutine = null;
         }
 
+        /// <summary>씬 전환 등으로 비활성화 시 진행 중인 히트스탑을 즉시 해제한다.</summary>
+        private void OnDisable()
+        {
+            if (stopCoroutine != null)
+            {
+                StopCoroutine(stopCoroutine);
+                stopCoroutine = null;
+            }
+            Time.timeScale = 1f;
+        }
+
         /// <summary>오브젝트 파괴 시 timeScale이 낮은 채로 굳는 것을 방지한다.</summary>
         private void OnDestroy()
         {
