@@ -70,6 +70,8 @@ namespace G1
         private Coroutine releaseCoroutine;
         /// <summary>쓰러지는 사운드 딜레이 코루틴. ResetState 시 중단해 풀 반납 후 재생을 방지한다.</summary>
         private Coroutine deathDownCoroutine;
+        /// <summary>재 파티클 딜레이 코루틴. ResetState 시 중단해 풀 반납 후 재생을 방지한다.</summary>
+        private Coroutine ashVfxCoroutine;
 
         /// <summary>
         /// 데미지 팝업 스폰 기준 위치 (목 본 또는 높이 추정값).
@@ -217,8 +219,10 @@ namespace G1
             // 쓰러지는 사운드는 deathDownDelay 후 재생 (releaseDelay를 초과하지 않도록 클램프)
             if (deathDownSound != null)
                 deathDownCoroutine = StartCoroutine(PlayDeathDownAfterDelay(Mathf.Min(deathDownDelay, releaseDelay - 0.05f)));
-            // 디졸브 연출 시작
-            monsterDissolve?.StartDissolve();
+            // 디졸브 연출 시작 — 재 파티클은 디졸브 시작 시점에 맞춰 동시 재생
+            if (monsterDissolve != null) monsterDissolve.StartDissolve();
+            if (AshVfxPool.Instance != null)
+                ashVfxCoroutine = StartCoroutine(ShowAshAfterDelay(monsterDissolve != null ? monsterDissolve.DissolveDelay : 0f));
             releaseCoroutine = StartCoroutine(ReleaseAfterDelay());
         }
 
@@ -228,6 +232,19 @@ namespace G1
             yield return new WaitForSecondsRealtime(delay);
             if (SoundManager.Instance != null)
                 SoundManager.Instance.Play(deathDownSound, transform.position, pitchVariance: 0.05f);
+        }
+
+        /// <summary>
+        /// delay 초 후 재(Ash) 파티클을 재생한다. 디졸브 시작 시점과 동기화된다.
+        /// 딜레이 전에 위치를 캐싱해 풀 반납 후 transform 위치가 바뀌어도 올바른 위치에 재생한다.
+        /// </summary>
+        private IEnumerator ShowAshAfterDelay(float delay)
+        {
+            // 딜레이 전에 위치 캐싱 — 코루틴 대기 중 풀 반납으로 transform이 이동할 수 있음
+            Vector3 spawnPos = transform.position;
+            yield return new WaitForSecondsRealtime(delay);
+            if (AshVfxPool.Instance != null)
+                AshVfxPool.Instance.Show(spawnPos);
         }
 
         /// <summary>
@@ -279,6 +296,11 @@ namespace G1
             {
                 StopCoroutine(deathDownCoroutine);
                 deathDownCoroutine = null;
+            }
+            if (ashVfxCoroutine != null)
+            {
+                StopCoroutine(ashVfxCoroutine);
+                ashVfxCoroutine = null;
             }
             // Awake가 호출되기 전에 ResetState가 실행될 수 있으므로 null이면 재캐싱
             if (col == null) col = GetComponent<Collider>();

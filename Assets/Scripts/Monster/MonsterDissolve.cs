@@ -21,6 +21,9 @@ namespace G1
         /// <summary>사망 후 디졸브 시작까지의 대기 시간 (초) — 쓰러지는 애니메이션 후 시작</summary>
         [SerializeField] private float dissolveDelay = 0.8f;
 
+        /// <summary>외부에서 디졸브 시작 딜레이를 읽기 위한 프로퍼티. 재 파티클 타이밍 동기화에 사용된다.</summary>
+        public float DissolveDelay => dissolveDelay;
+
         // 캐릭터의 모든 Renderer와 각 원본 머티리얼 배열
         private Renderer[] renderers;
         private Material[][] originalMaterials;
