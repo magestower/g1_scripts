@@ -756,7 +756,7 @@ MonoBehaviour:
   rotationSpeed: 360
   attackCooldown: 2
   attackDamage: 5
-  hitTimingNormalized: 0.4
+  hitTimingNormalized: 0.325
 --- !u!195 &1516713708839733065
 NavMeshAgent:
   m_ObjectHideFlags: 0
