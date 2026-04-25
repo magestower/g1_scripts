@@ -1,0 +1,10 @@
+# .claudeignore (프로젝트 루트)
+Library/
+Temp/
+Logs/
+obj/
+Build/
+Builds/
+UserSettings/
+*.meta
+*.asset
