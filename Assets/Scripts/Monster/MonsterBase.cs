@@ -115,15 +115,18 @@ namespace G1
         }
 
         /// <summary>
-        /// 자식 오브젝트 중 이름에 "neck"이 포함된 Transform을 찾아 반환한다.
+        /// 자식 오브젝트 중 이름에 "neck"이 포함된 Transform을 재귀 탐색해 반환한다.
         /// 없으면 null을 반환한다.
         /// </summary>
         private static Transform FindNeckBone(Transform root)
         {
-            foreach (Transform child in root.GetComponentsInChildren<Transform>(includeInactive: true))
+            for (int i = 0; i < root.childCount; i++)
             {
+                Transform child = root.GetChild(i);
                 if (child.name.IndexOf("neck", System.StringComparison.OrdinalIgnoreCase) >= 0)
                     return child;
+                Transform found = FindNeckBone(child);
+                if (found != null) return found;
             }
             return null;
         }
@@ -150,29 +153,34 @@ namespace G1
         /// 데미지를 받아 체력을 감소시킨다. 사망 시 Die()를 호출한다.
         /// </summary>
         /// <param name="damage">적용할 데미지 양</param>
-        /// <param name="isCritical">크리티컬 여부. 팝업 색상/크기에 반영된다.</param>
-        public virtual void TakeDamage(int damage, bool isCritical = false)
+        /// <param name="attackType">공격 종류 — 저항/방어 계산에 사용</param>
+        /// <param name="damageType">데미지 유형 — 피격 연출 분기에 사용</param>
+        public virtual void TakeDamage(int damage, AttackType attackType = AttackType.Physical, DamageType damageType = DamageType.Normal)
         {
             if (IsDead) return;
 
-            currentHealth -= damage;
-            if (currentHealth <= 0) currentHealth = 0;
-
-            // 피격 애니메이션 재생
-            animator.SetTrigger(HitHash);
-            // 피격 플래시 이펙트 재생
-            hitFlasher?.Flash();
-            // 피격 히트스탑
-            if (HitStop.Instance != null) HitStop.Instance.Trigger();
-            // 피격 스파크 이펙트
-            if (HitSparkPool.Instance != null) HitSparkPool.Instance.Show(GetPopupSpawnPos());
+            damage = Mathf.Max(0, damage);
+            currentHealth = Mathf.Max(0, currentHealth - damage);
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
-            // 피해량 수치를 화면에 표시
-            if (DamagePopupPool.Instance != null)
-                DamagePopupPool.Instance.Show(damage, GetPopupSpawnPos(), isCritical);
+
+            if (damage > 0)
+            {
+                Vector3 popupPos = GetPopupSpawnPos();
+                PlayHitEffects(attackType, damageType, popupPos);
+                DamagePopupPool.Instance?.Show(damage, popupPos, damageType == DamageType.Critical);
+            }
 
             if (currentHealth <= 0)
                 Die();
+        }
+
+        /// <summary>피격 시각/청각 연출을 재생한다. TakeDamage에서 호출된다.</summary>
+        private void PlayHitEffects(AttackType attackType, DamageType damageType, Vector3 popupPos)
+        {
+            animator.SetTrigger(HitHash);
+            hitFlasher?.Flash();
+            HitStop.Instance?.Trigger();
+            HitSparkPool.Instance?.Show(popupPos, attackType, damageType);
         }
 
         // ─────────────────────────────────────────
@@ -209,21 +217,31 @@ namespace G1
         protected virtual void Die()
         {
             IsDead = true;
-            // 피격 트리거가 큐에 남아 사망 애니메이션 직전에 피격 애니메이션이 재생되는 것을 방지
             animator.ResetTrigger(HitHash);
             animator.SetBool(DeadHash, true);
             col.enabled = false;
-            // 사망 사운드 즉시 재생 (단말마)
             if (deathSound != null && SoundManager.Instance != null)
-                SoundManager.Instance.Play(deathSound, GetPopupSpawnPos(), pitchVariance: 0.05f);
-            // 쓰러지는 사운드는 deathDownDelay 후 재생 (releaseDelay를 초과하지 않도록 클램프)
+                SoundManager.Instance.Play(deathSound, transform.position, pitchVariance: 0.05f);
+            StartDeathRoutines();
+        }
+
+        /// <summary>사망 시 지연 처리가 필요한 코루틴들을 시작한다.</summary>
+        private void StartDeathRoutines()
+        {
             if (deathDownSound != null)
-                deathDownCoroutine = StartCoroutine(PlayDeathDownAfterDelay(Mathf.Min(deathDownDelay, releaseDelay - 0.05f)));
-            // 디졸브 연출 시작 — 재 파티클은 디졸브 시작 시점에 맞춰 동시 재생
+                deathDownCoroutine = StartCoroutine(PlayDeathDownAfterDelay(Mathf.Clamp(deathDownDelay, 0f, releaseDelay - 0.05f)));
             if (monsterDissolve != null) monsterDissolve.StartDissolve();
             if (AshVfxPool.Instance != null)
                 ashVfxCoroutine = StartCoroutine(ShowAshAfterDelay(monsterDissolve != null ? monsterDissolve.DissolveDelay : 0f));
             releaseCoroutine = StartCoroutine(ReleaseAfterDelay());
+        }
+
+        /// <summary>코루틴이 실행 중이면 중단하고 null로 초기화한다.</summary>
+        private void StopAndClear(ref Coroutine coroutine)
+        {
+            if (coroutine == null) return;
+            StopCoroutine(coroutine);
+            coroutine = null;
         }
 
         /// <summary>delay 초 후 deathDownSound를 재생한다.</summary>
@@ -264,6 +282,16 @@ namespace G1
                 Destroy(gameObject); // 풀 미사용 환경 폴백
         }
 
+        /// <summary>MonsterManager가 배정한 슬롯 관련 상태를 초기값으로 되돌린다.</summary>
+        private void ResetSlotState()
+        {
+            AssignedSlotPos = Vector3.zero;
+            AssignedSlotRadius = 0f;
+            AssignedSlotRing = -1;
+            AssignedPriority = -1;
+            SeparationVec = Vector3.zero;
+        }
+
         /// <summary>현재 NavMeshAgent avoidancePriority 값. 미지원 클래스는 99 반환.</summary>
         public virtual int NavMeshPriority => 99;
 
@@ -287,21 +315,9 @@ namespace G1
         public virtual void ResetState()
         {
             // ReleaseAfterDelay만 중단 — StopAllCoroutines는 HitFlasher 등 다른 코루틴도 끊으므로 사용 금지
-            if (releaseCoroutine != null)
-            {
-                StopCoroutine(releaseCoroutine);
-                releaseCoroutine = null;
-            }
-            if (deathDownCoroutine != null)
-            {
-                StopCoroutine(deathDownCoroutine);
-                deathDownCoroutine = null;
-            }
-            if (ashVfxCoroutine != null)
-            {
-                StopCoroutine(ashVfxCoroutine);
-                ashVfxCoroutine = null;
-            }
+            StopAndClear(ref releaseCoroutine);
+            StopAndClear(ref deathDownCoroutine);
+            StopAndClear(ref ashVfxCoroutine);
             // Awake가 호출되기 전에 ResetState가 실행될 수 있으므로 null이면 재캐싱
             if (col == null) col = GetComponent<Collider>();
             if (animator == null) animator = GetComponent<Animator>();
@@ -309,14 +325,9 @@ namespace G1
             currentHealth = maxHealth;
             col.enabled = true;
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
-            AssignedSlotPos = Vector3.zero;
-            AssignedSlotRadius = 0f;
-            AssignedSlotRing = -1;
-            AssignedPriority = -1;
-            SeparationVec = Vector3.zero;
+            ResetSlotState();
             animator.SetBool(DeadHash, false);
             animator.ResetTrigger(HitHash);
-            // 디졸브 중단 및 원본 머티리얼 복원
             monsterDissolve?.ResetDissolve();
         }
     }

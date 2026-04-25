@@ -25,11 +25,19 @@ namespace G1
             public static readonly int IsDead = Animator.StringToHash("IsDead");
         }
 
+        [Header("스탯")]
+        /// <summary>플레이어 스탯 데이터 — 미할당 시 기본값(maxHealth=100, criticalChance=0.2)으로 동작</summary>
+        [SerializeField] private PlayerStat stat;
+
         [Header("체력")]
-        [SerializeField] private int maxHealth = 100;
         /// <summary>Hit 트리거 재발동 억제 시간(초)</summary>
         [SerializeField] private float hitTriggerCooldown = 1f;
+        /// <summary>피격 스파크 이펙트 생성 위치 오프셋 (로컬 기준)</summary>
+        [SerializeField] private Vector3 hitSparkOffset = new(0f, 0.1f, 0f);
         private int currentHealth;
+        private HitFlasher hitFlasher;
+        /// <summary>stat이 할당된 경우 stat.maxHealth, 미할당 시 100을 반환한다.</summary>
+        private int MaxHealth => stat != null ? stat.maxHealth : 100;
         private float lastHitTriggerTime = -999f;
 
         [Header("사운드")]
@@ -45,37 +53,52 @@ namespace G1
         /// <summary>현재 체력이 0 이하인지 여부 — IDamageable 구현, PlayerState.Dead 여부로 판단</summary>
         public bool IsDead => playerState == PlayerState.Dead;
 
+        /// <summary>체력 변경 시 발행되는 이벤트 (currentHealth, maxHealth). PlayerHpBar가 구독한다.</summary>
+        public event System.Action<int, int> OnHealthChanged;
+
         /// <summary>
         /// 데미지를 받아 체력을 감소시킨다. 사망 시 Dead 상태로 전이한다.
         /// </summary>
         /// <param name="damage">적용할 데미지 양 (양수)</param>
-        public void TakeDamage(int damage, bool isCritical = false)
+        /// <param name="attackType">공격 종류 — 저항/방어 계산에 사용</param>
+        /// <param name="damageType">데미지 유형 — 피격 연출 분기에 사용</param>
+        public void TakeDamage(int damage, AttackType attackType = AttackType.Physical, DamageType damageType = DamageType.Normal)
         {
             if (IsDead) return;
 
-            currentHealth -= damage;
+            int defense = stat != null ? stat.defense : 0;
+            damage = Mathf.Max(1, damage - defense);
+            currentHealth = Mathf.Max(0, currentHealth - damage);
+            OnHealthChanged?.Invoke(currentHealth, MaxHealth);
 
-            // 쿨다운 이내 중복 Hit 트리거 억제
+            Vector3 hitPos = transform.position + hitSparkOffset;
+            DamagePopupPool.Instance?.Show(damage, transform.position + Vector3.up * 1.0f, damageType == DamageType.Critical);
+            PlayHitEffects(attackType, damageType, hitPos);
+
+            if (currentHealth <= 0)
+            {
+                animator.ResetTrigger(AnimParam.Hit);
+                TransitionTo(PlayerState.Dead);
+            }
+        }
+
+        /// <summary>피격 시각/사운드 연출을 재생한다. TakeDamage에서 호출된다.</summary>
+        private void PlayHitEffects(AttackType attackType, DamageType damageType, Vector3 hitPos)
+        {
+            hitFlasher?.Flash();
+            HitSparkPool.Instance?.Show(hitPos, attackType, damageType);
+
             if (Time.time - lastHitTriggerTime >= hitTriggerCooldown)
             {
                 lastHitTriggerTime = Time.time;
                 animator.SetTrigger(AnimParam.Hit);
 
-                // 피격 사운드 재생 (목록 중 null 제외 무작위 선택)
                 if (hitSounds != null && hitSounds.Length > 0 && SoundManager.Instance != null)
                 {
                     AudioClip clip = hitSounds[UnityEngine.Random.Range(0, hitSounds.Length)];
                     if (clip != null)
                         SoundManager.Instance.Play(clip, transform.position, pitchVariance: 0.1f);
                 }
-            }
-
-            if (currentHealth <= 0)
-            {
-                currentHealth = 0;
-                // 사망 전 Hit 트리거를 제거해 GetHit 애니메이션이 사망 애니메이션보다 먼저 재생되는 것을 방지
-                animator.ResetTrigger(AnimParam.Hit);
-                TransitionTo(PlayerState.Dead);
             }
         }
 
@@ -189,7 +212,8 @@ namespace G1
 
         private void Awake()
         {
-            currentHealth = maxHealth;
+            currentHealth = MaxHealth;
+            // HP 바 초기화를 위해 Start에서 이벤트 발행 (구독자가 Awake에서 등록하므로)
             controller = GetComponent<CharacterController>();
             controller.skinWidth = 0.01f;
             animator = GetComponent<Animator>();
@@ -197,6 +221,8 @@ namespace G1
             // 인스펙터 미할당 시 같은 오브젝트에서 자동 탐색
             if (equipmentManager == null)
                 equipmentManager = GetComponent<CharacterEquipmentManager>();
+
+            hitFlasher = GetComponent<HitFlasher>();
 
             InitRangeIndicator();
 
@@ -210,6 +236,8 @@ namespace G1
         /// </summary>
         private void Start()
         {
+            // HP 바 등 구독자에게 초기 체력값 전달
+            OnHealthChanged?.Invoke(currentHealth, MaxHealth);
             StartCoroutine(EnableInputNextFrame());
         }
 
@@ -439,9 +467,8 @@ namespace G1
             }
 
             CurrentAttackTarget = nearest;
-            if (nearest == null) return;
-
-            FaceToward(nearest);
+            if (nearest != null)
+                FaceToward(nearest);
         }
 
         /// <summary>
@@ -515,6 +542,19 @@ namespace G1
         /// <returns>한 명 이상의 몬스터에게 실제로 데미지를 적용했으면 true</returns>
         public bool OnAttackHit(int damage = 0)
         {
+            int attackPower   = stat != null ? stat.attackPower        : 0;
+            float critChance  = stat != null ? stat.criticalChance     : 0f;
+            float critMult    = stat != null ? stat.criticalMultiplier : 2f;
+
+            damage += attackPower;
+
+            // 크리티컬 판정 (테스트: 항상 크리티컬)
+            bool isCritical = true || UnityEngine.Random.value < critChance;
+            if (isCritical)
+                damage = Mathf.RoundToInt(damage * critMult);
+
+            DamageType damageType = isCritical ? DamageType.Critical : DamageType.Normal;
+
             // hitRadius 반경 내 Monster 태그 콜라이더를 탐색해 IDamageable에 데미지 적용
             int count = Physics.OverlapSphereNonAlloc(transform.position, hitRadius, monsterHitBuffer);
             bool hit = false;
@@ -524,7 +564,7 @@ namespace G1
 
                 if (monsterHitBuffer[i].TryGetComponent<IDamageable>(out var damageable))
                 {
-                    damageable.TakeDamage(damage);
+                    damageable.TakeDamage(damage, AttackType.Physical, damageType);
                     hit = true;
                 }
             }
@@ -571,22 +611,26 @@ namespace G1
                     animator.SetBool(AnimParam.IsDead, true);
                     if (prev == PlayerState.Moving) OnMoveStateChanged?.Invoke(false);
                     if (prev == PlayerState.Attacking) OnAttackStateChanged?.Invoke(false);
-                    // 사망 사운드 즉시 재생 (단말마)
-                    if (deathSound != null && SoundManager.Instance != null)
-                        SoundManager.Instance.Play(deathSound, transform.position, pitchVariance: 0.05f);
-                    // 쓰러지는 사운드 딜레이 재생
-                    if (deathDownSound != null)
-                    {
-                        if (deathDownCoroutine != null) StopCoroutine(deathDownCoroutine);
-                        deathDownCoroutine = StartCoroutine(PlayDeathDownSound());
-                    }
                     OnPlayerDead?.Invoke();
+                    Die();
                     break;
             }
         }
 
         private Coroutine resumeMovementCoroutine;
         private Coroutine deathDownCoroutine;
+
+        /// <summary>사망 시 사운드 및 지연 코루틴을 시작한다.</summary>
+        private void Die()
+        {
+            if (deathSound != null && SoundManager.Instance != null)
+                SoundManager.Instance.Play(deathSound, transform.position, pitchVariance: 0.05f);
+            if (deathDownSound != null)
+            {
+                if (deathDownCoroutine != null) StopCoroutine(deathDownCoroutine);
+                deathDownCoroutine = StartCoroutine(PlayDeathDownSound());
+            }
+        }
 
         /// <summary>
         /// 공격 애니메이션 끝에서 호출됩니다.

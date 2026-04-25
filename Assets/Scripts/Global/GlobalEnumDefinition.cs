@@ -58,10 +58,33 @@ namespace G1
         TwoHanded  = 2,  // 양손 무기
     }
 
-	/// <summary>
-	// 아이템 희귀도 등급 — 아이템의 희귀도를 정의합니다.
-	/// </summary>
-	public enum Rarity
+    /// <summary>
+    /// 공격 종류 — 방어/저항 계산 및 속성 효과 분기에 사용합니다.
+    /// 새 종류 추가 시 저항 계산 로직도 함께 확장하세요.
+    /// </summary>
+    public enum AttackType
+    {
+        Physical  = 0,  // 물리 공격 — 방어력으로 감소
+        Magic     = 1,  // 마법 공격 — 마법 저항으로 감소
+        Fire      = 2,  // 화염 공격
+        Electric  = 3,  // 전기 공격
+        Poison    = 4,  // 독 공격
+        Curse     = 5,  // 저주 공격
+    }
+
+    /// <summary>
+    /// 데미지 유형 — 피격 연출(이펙트, 사운드 등) 분기에 사용합니다.
+    /// </summary>
+    public enum DamageType
+    {
+        Normal    = 0,  // 일반 피해 — 기본 연출
+        Critical  = 1,  // 크리티컬 — 강조 연출
+    }
+
+    /// <summary>
+    // 아이템 희귀도 등급 — 아이템의 희귀도를 정의합니다.
+    /// </summary>
+    public enum Rarity
 	{
 		Common,
 		Uncommon,

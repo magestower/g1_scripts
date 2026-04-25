@@ -12,8 +12,9 @@ namespace G1
         /// 데미지를 받아 체력을 감소시킨다.
         /// </summary>
         /// <param name="damage">적용할 데미지 양 (양수)</param>
-        /// <param name="isCritical">크리티컬 여부. 팝업 색상/크기에 반영된다.</param>
-        void TakeDamage(int damage, bool isCritical = false);
+        /// <param name="attackType">공격 종류 — 저항/방어 계산에 사용</param>
+        /// <param name="damageType">데미지 유형 — 피격 연출 분기에 사용</param>
+        void TakeDamage(int damage, AttackType attackType = AttackType.Physical, DamageType damageType = DamageType.Normal);
 
         /// <summary>체력이 0 이하인지 여부</summary>
         bool IsDead { get; }
