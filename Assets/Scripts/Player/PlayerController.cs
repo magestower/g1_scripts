@@ -551,8 +551,8 @@ namespace G1
 
             damage += attackPower;
 
-            // 크리티컬 판정 (테스트: 항상 크리티컬)
-            bool isCritical = true || UnityEngine.Random.value < critChance;
+            // 크리티컬 판정
+            bool isCritical = UnityEngine.Random.value < critChance;
             if (isCritical)
                 damage = Mathf.RoundToInt(damage * critMult);
 
