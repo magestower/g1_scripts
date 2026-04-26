@@ -56,6 +56,9 @@ namespace G1
         /// <summary>체력 변경 시 발행되는 이벤트 (currentHealth, maxHealth). PlayerHpBar가 구독한다.</summary>
         public event System.Action<int, int> OnHealthChanged;
 
+        /// <summary>현재 체력값으로 OnHealthChanged 이벤트를 즉시 발행한다. 구독 후 초기 UI 동기화에 사용한다.</summary>
+        public void ForceHealthUIRefresh() => OnHealthChanged?.Invoke(currentHealth, MaxHealth);
+
         /// <summary>
         /// 데미지를 받아 체력을 감소시킨다. 사망 시 Dead 상태로 전이한다.
         /// </summary>
@@ -555,17 +558,60 @@ namespace G1
 
             DamageType damageType = isCritical ? DamageType.Critical : DamageType.Normal;
 
-            // hitRadius 반경 내 Monster 태그 콜라이더를 탐색해 IDamageable에 데미지 적용
+            TargetType targetType = CurrentAttackData != null ? CurrentAttackData.targetType : TargetType.Single;
+
+            // hitRadius 반경 내 Monster 태그 콜라이더 탐색
             int count = Physics.OverlapSphereNonAlloc(transform.position, hitRadius, monsterHitBuffer);
             bool hit = false;
-            for (int i = 0; i < count; i++)
-            {
-                if (!monsterHitBuffer[i].CompareTag(monsterTag)) continue;
 
-                if (monsterHitBuffer[i].TryGetComponent<IDamageable>(out var damageable))
+            if (targetType == TargetType.Single)
+            {
+                // 단일 대상 — CurrentAttackTarget(자동 조준 타겟)을 우선 사용,
+                // 없거나 hitRadius 밖이면 반경 내 가장 가까운 몬스터로 폴백
+                IDamageable target = null;
+
+                if (CurrentAttackTarget != null
+                    && CurrentAttackTarget.gameObject.activeInHierarchy
+                    && Vector3.Distance(transform.position, CurrentAttackTarget.position) <= hitRadius
+                    && (!CurrentAttackTarget.TryGetComponent<IDamageable>(out var targetCheck) || !targetCheck.IsDead))
                 {
-                    damageable.TakeDamage(damage, AttackType.Physical, damageType);
+                    CurrentAttackTarget.TryGetComponent(out target);
+                }
+
+                if (target == null)
+                {
+                    Collider nearest = null;
+                    float minDist = float.MaxValue;
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (!monsterHitBuffer[i].CompareTag(monsterTag)) continue;
+                        float dist = Vector3.Distance(transform.position, monsterHitBuffer[i].transform.position);
+                        if (dist < minDist)
+                        {
+                            minDist = dist;
+                            nearest = monsterHitBuffer[i];
+                        }
+                    }
+                    nearest?.TryGetComponent(out target);
+                }
+
+                if (target != null)
+                {
+                    target.TakeDamage(damage, AttackType.Physical, damageType);
                     hit = true;
+                }
+            }
+            else
+            {
+                // 광역 대상 — 반경 내 모든 몬스터에게 적용
+                for (int i = 0; i < count; i++)
+                {
+                    if (!monsterHitBuffer[i].CompareTag(monsterTag)) continue;
+                    if (monsterHitBuffer[i].TryGetComponent<IDamageable>(out var damageable))
+                    {
+                        damageable.TakeDamage(damage, AttackType.Physical, damageType);
+                        hit = true;
+                    }
                 }
             }
             return hit;

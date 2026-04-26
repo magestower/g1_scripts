@@ -24,6 +24,9 @@ namespace G1
         /// <summary>이 공격의 기본 데미지</summary>
         public int damage = 10;
 
+        /// <summary>공격 대상 범위 — Single: 가장 가까운 단일 대상, Area: hitRadius 내 전체 대상</summary>
+        public TargetType targetType = TargetType.Single;
+
         [Header("사운드")]
         /// <summary>무기를 휘두를 때 재생할 사운드 (effectTriggerNormalized 시점)</summary>
         public AudioClip swingSound;

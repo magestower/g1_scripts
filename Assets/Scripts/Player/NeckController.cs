@@ -76,24 +76,11 @@ namespace G1
         // Unity 이벤트
         // ─────────────────────────────────────────
 
-        /// <summary>공격 타겟 변경 및 플레이어 사망 이벤트 구독</summary>
-        private void OnEnable()
-        {
-            PlayerController.OnAttackTargetChanged += onAttackTargetChanged;
-            PlayerController.OnPlayerDead += OnPlayerDead;
-        }
-
-        /// <summary>공격 타겟 변경 및 플레이어 사망 이벤트 구독 해제</summary>
-        private void OnDisable()
-        {
-            PlayerController.OnAttackTargetChanged -= onAttackTargetChanged;
-            PlayerController.OnPlayerDead -= OnPlayerDead;
-        }
-
         /// <summary>인스펙터 미할당 시 컴포넌트를 자동 탐색하고 neck.x 본과 자식 본을 캐싱한다.</summary>
         private void Awake()
         {
-            // OnEnable/OnDisable 반복 시 새 람다 생성으로 구독 해제가 실패하는 것을 방지
+            // OnEnable보다 먼저 람다를 생성해야 null 구독을 방지할 수 있음
+            // (Awake → OnEnable 순서가 보장되지만, 람다 생성을 Awake에서만 하므로 OnEnable에서 항상 유효)
             onAttackTargetChanged = t => LookTarget = t;
             if (playerController == null)
                 playerController = GetComponent<PlayerController>();
@@ -110,6 +97,20 @@ namespace G1
             }
 
             CacheResetChildBones();
+        }
+
+        /// <summary>공격 타겟 변경 및 플레이어 사망 이벤트 구독</summary>
+        private void OnEnable()
+        {
+            PlayerController.OnAttackTargetChanged += onAttackTargetChanged;
+            PlayerController.OnPlayerDead += OnPlayerDead;
+        }
+
+        /// <summary>공격 타겟 변경 및 플레이어 사망 이벤트 구독 해제</summary>
+        private void OnDisable()
+        {
+            PlayerController.OnAttackTargetChanged -= onAttackTargetChanged;
+            PlayerController.OnPlayerDead -= OnPlayerDead;
         }
 
         /// <summary>

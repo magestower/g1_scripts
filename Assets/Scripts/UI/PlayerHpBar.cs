@@ -14,7 +14,7 @@ namespace G1
 
         private PlayerController player;
 
-        /// <summary>씬에서 PlayerController를 찾아 이벤트를 구독한다.</summary>
+        /// <summary>씬에서 PlayerController를 찾아 이벤트를 구독하고 초기 체력을 반영한다.</summary>
         private void Start()
         {
             player = FindAnyObjectByType<PlayerController>();
@@ -24,6 +24,8 @@ namespace G1
                 return;
             }
             player.OnHealthChanged += OnHealthChanged;
+            // PlayerController.Start()에서 이미 이벤트를 발행했을 수 있으므로 구독 후 즉시 초기값 반영
+            player.ForceHealthUIRefresh();
         }
 
         /// <summary>구독 해제로 메모리 누수를 방지한다.</summary>

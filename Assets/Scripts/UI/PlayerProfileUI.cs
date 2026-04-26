@@ -41,7 +41,7 @@ namespace G1
                 nameLabel.text = profile.playerName;
 
             if (levelLabel != null && stat != null)
-                levelLabel.text = $"{stat.level}";
+                levelLabel.text = $"Lv.{stat.level}";
         }
     }
 }

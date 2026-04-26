@@ -82,6 +82,15 @@ namespace G1
     }
 
     /// <summary>
+    /// 공격 대상 범위 — Single은 가장 가까운 단일 대상, Area는 hitRadius 내 전체 대상에게 피해를 줍니다.
+    /// </summary>
+    public enum TargetType
+    {
+        Single = 0,  // 단일 대상 — 가장 가까운 몬스터 1명
+        Area   = 1,  // 광역 대상 — hitRadius 내 모든 몬스터
+    }
+
+    /// <summary>
     // 아이템 희귀도 등급 — 아이템의 희귀도를 정의합니다.
     /// </summary>
     public enum Rarity
