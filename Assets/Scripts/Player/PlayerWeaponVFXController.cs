@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace G1
@@ -14,8 +15,12 @@ namespace G1
 		{
 			/// <summary>이 엔트리가 대응하는 무기 타입</summary>
 			public WeaponType weaponType;
-			/// <summary>해당 무기 타입에서 재생할 슬래시 파티클</summary>
-			public ParticleSystem slashParticle;
+			/// <summary>Awake에서 인스턴스화할 슬래시 파티클 프리팹</summary>
+			public GameObject slashPrefab;
+			/// <summary>Awake에서 slashPrefab을 인스턴스화한 런타임 인스턴스</summary>
+			[NonSerialized] public ParticleSystem slashParticle;
+			/// <summary>파티클 프리팹의 원본 startSize — Awake에서 캐싱, effectSize 비율 계산 기준</summary>
+			[NonSerialized] public float originalStartSize;
 		}
 
 		[Header("VFX 수치 프로필 (ScriptableObject)")]
@@ -26,59 +31,62 @@ namespace G1
 		/// <summary>WeaponType마다 재생할 ParticleSystem을 인스펙터에서 할당합니다.</summary>
 		[SerializeField] private WeaponParticleEntry[] weaponParticles;
 
-		[Header("오른손 기준 위치")]
-		[SerializeField] private Transform rightHandBone;             // 오른손 본 Transform (직접 할당)
-		[SerializeField] private string rightHandBoneName = "hand.r"; // 자동 탐색 시 사용할 본 이름
+		[Header("무기 Trail")]
+		/// <summary>공격 애니메이션 중 활성화할 Tiny.Trail 컴포넌트. weapon 오브젝트에서 직접 할당한다.</summary>
+		[SerializeField] private Tiny.Trail weaponTrail;
 
-		[SerializeField] private Transform characterTransform;        // 캐릭터 Transform (방향 기준)
+		/// <summary>무기 Trail을 켜거나 끈다. AttackStateBehaviour에서 호출한다.</summary>
+		public void SetWeaponTrail(bool active)
+		{
+			if (weaponTrail == null) return;
+			// Clear는 enabled 상태에서만 동작하므로 비활성화 전에 먼저 호출
+			if (!active) weaponTrail.Clear();
+			weaponTrail.enabled = active;
+		}
+
 
 		/// <summary>
 		/// Awake: 인스펙터 미할당 시 스켈레톤 본 이름으로 rightHandBone을 자동 탐색합니다.
 		/// </summary>
 		private void Awake()
 		{
-			if (rightHandBone == null)
-				rightHandBone = FindChildByName(rightHandBoneName);
-
-			characterTransform = transform;
-		}
-
-		/// <summary>
-		/// 모든 자식 오브젝트를 순회하여 대소문자 구분 없이 이름이 일치하는 Transform을 반환합니다.
-		/// 자기 자신은 제외하며, 찾지 못하면 경고 로그를 출력하고 null을 반환합니다.
-		/// </summary>
-		/// <param name="targetName">탐색할 오브젝트 이름</param>
-		/// <returns>찾은 Transform, 없으면 null</returns>
-		private Transform FindChildByName(string targetName)
-		{
-			foreach (Transform child in GetComponentsInChildren<Transform>(includeInactive: true))
+			// Trail은 공격 시작 전까지 항상 비활성 상태로 시작
+			if (weaponTrail != null)
 			{
-				if (child == transform) continue;
-
-				if (string.Equals(child.name, targetName, System.StringComparison.OrdinalIgnoreCase))
-					return child;
+				weaponTrail.Clear();
+				weaponTrail.enabled = false;
 			}
 
-			Debug.LogWarning($"[PlayerWeaponVFXController] 자식 오브젝트 '{targetName}'을 찾을 수 없습니다.", this);
-			return null;
-		}
+			// 프리팹 인스턴스화 및 원본 startSize 캐싱
+			if (weaponParticles != null)
+				for (int i = 0; i < weaponParticles.Length; i++)
+				{
+					if (weaponParticles[i].slashPrefab == null) continue;
 
-		/// <summary>
-		/// weaponParticles 배열에서 weaponType에 대응하는 ParticleSystem을 반환합니다.
-		/// 등록되지 않은 타입이면 null을 반환합니다.
-		/// </summary>
-		/// <param name="weaponType">조회할 무기 타입</param>
-		/// <returns>대응하는 ParticleSystem, 없으면 null</returns>
-		private ParticleSystem GetParticle(WeaponType weaponType)
-		{
-			if (weaponParticles == null) return null;
+					GameObject instance = Instantiate(weaponParticles[i].slashPrefab, transform);
+					weaponParticles[i].slashParticle = instance.GetComponent<ParticleSystem>();
 
-			foreach (var e in weaponParticles)
-			{
-				if (e.weaponType == weaponType)
-					return e.slashParticle;
-			}
-			return null;
+					if (weaponParticles[i].slashParticle == null)
+					{
+						Debug.LogWarning($"[PlayerWeaponVFXController] {weaponParticles[i].slashPrefab.name}에 ParticleSystem이 없습니다.");
+						continue;
+					}
+					// 활성 상태로 생성 후 즉시 정지 — SetActive 토글 없이 Stop/Play로만 제어
+					weaponParticles[i].slashParticle.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+					var startSize = weaponParticles[i].slashParticle.main.startSize;
+					float size = startSize.mode switch
+					{
+						ParticleSystemCurveMode.Constant    => startSize.constant,
+						ParticleSystemCurveMode.TwoConstants => (startSize.constantMin + startSize.constantMax) * 0.5f,
+						ParticleSystemCurveMode.Curve        => startSize.curve.Evaluate(0f),
+						ParticleSystemCurveMode.TwoCurves    => (startSize.curveMin.Evaluate(0f) + startSize.curveMax.Evaluate(0f)) * 0.5f,
+						_                                    => 0f,
+					};
+					if (size <= 0f)
+						Debug.LogWarning($"[PlayerWeaponVFXController] {weaponParticles[i].slashParticle.name}의 originalStartSize가 0입니다. ParticleSystem startSize 설정을 확인하세요.");
+					weaponParticles[i].originalStartSize = size;
+				}
 		}
 
 		/// <summary>
@@ -87,19 +95,17 @@ namespace G1
 		/// <param name="particle">재생할 ParticleSystem</param>
 		/// <param name="profileEntry">수치를 가져올 프로필 엔트리</param>
 		/// <param name="position">이펙트를 생성할 월드 좌표</param>
-		private void PlaySlashParticle(ParticleSystem particle, in WeaponVFXProfile.Entry profileEntry, Vector3 position)
+		private void PlaySlashParticle(ParticleSystem particle, float originalStartSize, in WeaponVFXProfile.Entry profileEntry, Vector3 position)
 		{
 			// 캐릭터 Y축 회전 기준으로 슬래시 회전값 적용
-			float characterYaw = characterTransform != null ? characterTransform.eulerAngles.y : 0f;
-			Quaternion finalRotation = Quaternion.Euler(0f, characterYaw, 0f) * Quaternion.Euler(profileEntry.slashRotation);
+			Quaternion finalRotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f) * Quaternion.Euler(profileEntry.slashRotation);
 			particle.transform.SetPositionAndRotation(position, finalRotation);
 
-			// 프로필 에셋에서 읽어온 수치 적용
+			// effectSize를 원본 startSize 대비 비율로 적용 (1.0 = 원본 크기)
 			var main = particle.main;
-			main.startSize  = profileEntry.effectSize;
+			main.startSize  = originalStartSize * profileEntry.effectSize;
 			main.startDelay = profileEntry.playDelay;
 
-			// 이미 재생 중인 경우 초기화 후 재생
 			particle.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 			particle.Play();
 		}
@@ -112,9 +118,17 @@ namespace G1
 		/// <param name="weaponType">현재 장착 무기 타입</param>
 		public void PlayEffect(WeaponType weaponType)
 		{
-			if (rightHandBone == null) return;
-
-			ParticleSystem particle = GetParticle(weaponType);
+			// weaponType에 대응하는 파티클과 원본 크기를 함께 조회
+			ParticleSystem particle = null;
+			float originalStartSize = 1f;
+			if (weaponParticles != null)
+				for (int i = 0; i < weaponParticles.Length; i++)
+					if (weaponParticles[i].weaponType == weaponType)
+					{
+						particle = weaponParticles[i].slashParticle;
+						originalStartSize = weaponParticles[i].originalStartSize;
+						break;
+					}
 			if (particle == null) return;
 
 			if (vfxProfile == null || !vfxProfile.TryGetEntry(weaponType, out WeaponVFXProfile.Entry profileEntry))
@@ -123,16 +137,13 @@ namespace G1
 				return;
 			}
 
-			// 프로필 수치 기반 위치 보정 계산 (characterTransform null 시 rightHandBone 위치 그대로 사용)
-			Vector3 effectPos = rightHandBone.position;
-			if (characterTransform != null)
-			{
-				effectPos += characterTransform.right   * profileEntry.positionOffset.x
-				           + characterTransform.up      * profileEntry.positionOffset.y
-				           + characterTransform.forward * profileEntry.positionOffset.z;
-			}
+			// 캐릭터 루트 기준 offset 적용
+			Vector3 effectPos = transform.position
+			                  + transform.right   * profileEntry.positionOffset.x
+			                  + transform.up      * profileEntry.positionOffset.y
+			                  + transform.forward * profileEntry.positionOffset.z;
 
-			PlaySlashParticle(particle, profileEntry, effectPos);
+			PlaySlashParticle(particle, originalStartSize, profileEntry, effectPos);
 		}
 	}
 }

@@ -39,6 +39,9 @@ namespace G1
 
             hasHit = false;
             hasPlayedEffect = false;
+
+            if (player.CurrentWeaponType != WeaponType.Unarmed)
+                weaponVFX?.SetWeaponTrail(true);
         }
 
         /// <summary>
@@ -59,11 +62,10 @@ namespace G1
             float progress = stateInfo.normalizedTime % 1f;
 
             // 지정된 진행률 시점에 슬래시 이펙트 + 휘두르기 사운드 발동 (1회만)
-            // TODO: VFX 임시 비활성화 — 추후 복원 예정
             if (!hasPlayedEffect && progress >= data.effectTriggerNormalized)
             {
-                // if (weaponVFX != null)
-                //     weaponVFX.PlayEffect(player.CurrentWeaponType);
+                if (weaponVFX != null)
+                    weaponVFX.PlayEffect(player.CurrentWeaponType);
                 if (data.swingSound != null && SoundManager.Instance != null)
                     SoundManager.Instance.Play(data.swingSound, player.transform.position, pitchVariance: 0.05f);
                 hasPlayedEffect = true;
@@ -90,6 +92,7 @@ namespace G1
         {
             if (player == null) return;
 
+            weaponVFX?.SetWeaponTrail(false);
             player.OnAttackEnd();
         }
     }

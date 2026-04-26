@@ -20,7 +20,7 @@ namespace G1
         {
             /// <summary>이 엔트리가 대응하는 무기 타입</summary>
             public WeaponType weaponType;
-            /// <summary>파티클 Start Size</summary>
+            /// <summary>파티클 Start Size 배율 (1.0 = 원본 크기, 2.0 = 2배)</summary>
             public float effectSize;
             /// <summary>파티클 재생 지연 시간 (초)</summary>
             public float playDelay;

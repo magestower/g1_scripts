@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::G1.WeaponVFXProfile
   entries:
   - weaponType: 1
-    effectSize: 4
+    effectSize: 1
     playDelay: 0.1
-    positionOffset: {x: 0, y: -0.1, z: 0.5}
-    slashRotation: {x: 70, y: 180, z: 30}
+    positionOffset: {x: 0, y: 0.5, z: 0.1}
+    slashRotation: {x: 0, y: -135, z: 135}

@@ -16,6 +16,7 @@ MonoBehaviour:
   effectTriggerNormalized: 0.3
   hitTimingNormalized: 0.5
   damage: 10
-  swingSound: {fileID: 8300000, guid: a8bd25dd39f996444a306df9456adaeb, type: 3}
+  targetType: 0
+  swingSound: {fileID: 8300000, guid: 7174a737cc4c25844baa28af9f5524be, type: 3}
   hitSound: {fileID: 8300000, guid: a715ddf00ff7f24469c72404e8df85e9, type: 3}
   requiresWeapon: 1
