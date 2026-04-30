@@ -48,6 +48,8 @@ namespace G1
                 return;
             }
             Instance = this;
+            // DontDestroyOnLoad는 루트 오브젝트에만 적용 가능하므로 부모에서 분리 후 호출
+            transform.SetParent(null);
             DontDestroyOnLoad(gameObject);
 
             for (int i = 0; i < prewarmSize; i++)
