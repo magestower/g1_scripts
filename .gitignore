@@ -1,3 +1,6 @@
+# --- [ MCP 설정 ] ---
+.mcp.json
+
 # --- [ Unity 필수 제외 폴더 ] ---
 /[Ll]ibrary/
 /[Tt]emp/
