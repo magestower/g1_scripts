@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 4ef48633d59871c44b8e336fa48f51f9
+ShaderIncludeImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 259864
+  packageName: Anime Cel Shader URP
+  packageVersion: 3.1.1
+  assetPath: Assets/NekoLegends/Shaders/ShaderAnimeCel/Cel.hlsl
+  uploadId: 794136

@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 5a86b64d027ff2e4d8523c8b9a776961
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 259864
+  packageName: Anime Cel Shader URP
+  packageVersion: 3.1.1
+  assetPath: Assets/NekoLegends/Shaders/ShaderAnimeCel/Editor/CelShaderInspectorGlass.cs
+  uploadId: 794136

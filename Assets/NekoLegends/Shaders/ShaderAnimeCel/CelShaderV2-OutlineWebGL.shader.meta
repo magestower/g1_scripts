@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: e20b8cd096cfc574890552ae8b76f662
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  preprocessorOverride: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 259864
+  packageName: Anime Cel Shader URP
+  packageVersion: 3.1.1
+  assetPath: Assets/NekoLegends/Shaders/ShaderAnimeCel/CelShaderV2-OutlineWebGL.shader
+  uploadId: 794136
