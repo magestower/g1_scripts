@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace G1
@@ -24,8 +25,8 @@ namespace G1
     	[SerializeField] private PlayerController playerController; // 공격 등 플레이어 액션 호출 대상
 
     	[Header("의상 테스트")]
-    	[SerializeField] private CharacterCostumeManager costumeManager; // 의상 관리 대상 캐릭터
-    	[SerializeField] private OutfitData testOutfit;                  // 테스트용 의상 데이터
+    	[SerializeField] private CharacterCostumeManager costumeManager;  // 의상 관리 대상 캐릭터
+    	[SerializeField] private List<OutfitData> testOutfits = new();    // 테스트용 의상 데이터 목록 (여러 개 할당 가능)
 
     	[Header("장비 테스트")]
     	[SerializeField] private CharacterEquipmentManager equipmentManager; // 장비 관리 대상 캐릭터
@@ -86,7 +87,7 @@ namespace G1
     	}
 
     	/// <summary>
-    	/// Update: Windows 에디터에서 1~4 키를 눌렀을 때 해당 슬롯의 공격을 실행합니다.
+    	/// Update: Windows 에디터에서 1 키를 눌렀을 때 공격을 실행합니다.
     	/// 모바일에서는 UI 버튼을 통해 HandleButtonPressed가 호출됩니다.
     	/// </summary>
     	private void Update()
@@ -94,8 +95,8 @@ namespace G1
 #if UNITY_EDITOR_WIN
     		if (playerController == null) return;
 
-    		// 숫자 키 1~4 → 공격 슬롯 0~3 실행
-    		if (Keyboard.current.digit1Key.wasPressedThisFrame) playerController.OnAttackStart();    		
+    		// 숫자 키 1 → 공격 슬롯 0 실행
+    		if (Keyboard.current.digit1Key.wasPressedThisFrame) playerController.OnAttackStart();
 #endif
     	}
 
@@ -183,8 +184,8 @@ namespace G1
     	}
 
     	/// <summary>
-    	/// 테스트: testOutfit을 캐릭터에 장착합니다.
-    	/// 인스펙터에서 costumeManager와 testOutfit을 할당한 뒤 호출하세요.
+    	/// 테스트: testOutfits 목록의 모든 의상을 순서대로 캐릭터에 장착합니다.
+    	/// 인스펙터에서 costumeManager와 testOutfits를 할당한 뒤 호출하세요.
     	/// </summary>
     	public void TestEquipOutfit()
     	{
@@ -194,13 +195,18 @@ namespace G1
     			return;
     		}
 
-    		if (testOutfit == null)
+    		if (testOutfits == null || testOutfits.Count == 0)
     		{
-    			Debug.LogWarning("[UIGameSceneController] testOutfit이 할당되지 않았습니다.");
+    			Debug.LogWarning("[UIGameSceneController] testOutfits가 비어 있습니다.");
     			return;
     		}
 
-    		costumeManager.Equip(testOutfit);
+    		// 목록의 의상을 순서대로 장착 — null 항목은 건너뜀
+    		foreach (var outfit in testOutfits)
+    		{
+    			if (outfit != null)
+    				costumeManager.Equip(outfit);
+    		}
     	}
 
     	/// <summary>
