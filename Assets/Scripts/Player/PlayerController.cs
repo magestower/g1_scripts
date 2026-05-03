@@ -34,6 +34,8 @@ namespace G1
         [SerializeField] private float hitTriggerCooldown = 1f;
         /// <summary>피격 스파크 이펙트 생성 위치 오프셋 (로컬 기준)</summary>
         [SerializeField] private Vector3 hitSparkOffset = new(0f, 0.1f, 0f);
+        /// <summary>피격 시 재생할 이펙트 조합 (비트 플래그, Inspector에서 체크박스로 선택)</summary>
+        [SerializeField] private HitEffectType hitEffects = HitEffectType.None;
         private int currentHealth;
         private HitFlasher hitFlasher;
         /// <summary>stat이 할당된 경우 stat.maxHealth, 미할당 시 100을 반환한다.</summary>
@@ -89,7 +91,7 @@ namespace G1
         private void PlayHitEffects(AttackType attackType, DamageType damageType, Vector3 hitPos)
         {
             hitFlasher?.Flash();
-            HitSparkPool.Instance?.Show(hitPos, attackType, damageType);
+            HitSparkPool.Instance?.Show(hitPos, hitEffects);
 
             if (Time.time - lastHitTriggerTime >= hitTriggerCooldown)
             {

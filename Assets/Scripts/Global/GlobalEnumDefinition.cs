@@ -23,7 +23,9 @@ namespace G1
         Torso = 1 << 0,  // 몸통
         Legs  = 1 << 1,  // 다리
         Head  = 1 << 2,  // 머리
-        Shoes = 1 << 3   // 신발
+        Shoes = 1 << 3,  // 신발
+        Hip   = 1 << 4,  // 힙/골반
+        Hands = 1 << 5   // 손
     }
 
     /// <summary>
@@ -88,6 +90,21 @@ namespace G1
     {
         Single = 0,  // 단일 대상 — 가장 가까운 몬스터 1명
         Area   = 1,  // 광역 대상 — hitRadius 내 모든 몬스터
+    }
+
+    /// <summary>
+    /// 피격 이펙트 종류 — 비트 플래그로 조합해서 Show()에 전달한다.
+    /// 새 이펙트 추가 시 HitEffectBase를 상속한 컴포넌트와 함께 값을 추가하세요.
+    /// </summary>
+    [System.Flags]
+    public enum HitEffectType
+    {
+        None  = 0,
+        Ring  = 1 << 0,  // 링 확장 이펙트
+        Impact_01 = 1 << 1,
+        Impact_02  = 1 << 2,
+        Critical_01  = 1 << 3,
+        Critical_02  = 1 << 4,
     }
 
     /// <summary>

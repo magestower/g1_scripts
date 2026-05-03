@@ -4,9 +4,9 @@ using UnityEngine;
 namespace G1
 {
     /// <summary>
-    /// 피격 스파크 이펙트를 관리하는 싱글톤 풀.
-    /// AttackType/DamageType 조합에 따라 다른 파티클 프리팹을 재생한다.
-    /// 매핑되지 않은 조합은 defaultSparkPrefab으로 폴백한다.
+    /// 피격 이펙트를 관리하는 싱글톤 풀.
+    /// EffectBase를 상속한 컴포넌트가 붙은 프리팹을 등록하면,
+    /// Show(effectPos, HitEffectType 플래그 조합) 호출 시 해당 이펙트들을 동시 재생한다.
     /// </summary>
     public class HitSparkPool : MonoBehaviour
     {
@@ -14,13 +14,11 @@ namespace G1
         // 내부 타입
         // ─────────────────────────────────────────
 
-        /// <summary>AttackType/DamageType 조합과 파티클 프리팹을 연결하는 매핑 항목</summary>
+        /// <summary>이펙트 프리팹과 prewarm 수를 묶는 등록 항목</summary>
         [System.Serializable]
-        private struct SparkEntry
+        private struct EffectEntry
         {
-            public AttackType attackType;
-            public DamageType damageType;
-            /// <summary>해당 조합에 사용할 파티클 프리팹</summary>
+            /// <summary>EffectBase 컴포넌트가 붙어있는 프리팹</summary>
             public GameObject prefab;
             /// <summary>씬 시작 시 미리 생성해둘 수</summary>
             public int prewarmSize;
@@ -30,13 +28,8 @@ namespace G1
         // Inspector 설정값
         // ─────────────────────────────────────────
 
-        /// <summary>매핑되지 않은 조합에 사용할 기본 파티클 프리팹</summary>
-        [SerializeField] private GameObject defaultSparkPrefab;
-        /// <summary>기본 프리팹 prewarm 수</summary>
-        [SerializeField] private int defaultPrewarmSize = 8;
-
-        /// <summary>AttackType/DamageType 조합별 파티클 프리팹 매핑 목록</summary>
-        [SerializeField] private SparkEntry[] sparkEntries;
+        /// <summary>등록할 이펙트 프리팹 목록. 각 프리팹에 EffectBase 컴포넌트가 있어야 한다.</summary>
+        [SerializeField] private EffectEntry[] effectEntries;
 
         // ─────────────────────────────────────────
         // 싱글톤
@@ -48,11 +41,11 @@ namespace G1
         // 런타임 상태
         // ─────────────────────────────────────────
 
-        /// <summary>프리팹별 파티클 풀 목록</summary>
-        private readonly Dictionary<GameObject, List<ParticleSystem>> pools = new();
+        /// <summary>HitEffectType → 풀 (비활성 인스턴스 목록)</summary>
+        private readonly Dictionary<HitEffectType, List<EffectBase>> pools = new();
 
-        /// <summary>조합 키 → 프리팹 빠른 조회용 딕셔너리</summary>
-        private readonly Dictionary<(AttackType, DamageType), GameObject> prefabMap = new();
+        /// <summary>Show() 호출마다 Enum.GetValues 배열 할당을 피하기 위한 정적 캐시</summary>
+        private static readonly HitEffectType[] allEffectTypes = (HitEffectType[])System.Enum.GetValues(typeof(HitEffectType));
 
         // ─────────────────────────────────────────
         // Unity 이벤트
@@ -67,56 +60,51 @@ namespace G1
                 return;
             }
             Instance = this;
-            // DontDestroyOnLoad는 루트 오브젝트에만 적용 가능하므로 부모에서 분리 후 호출
             transform.SetParent(null);
             DontDestroyOnLoad(gameObject);
+            UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
 
-            // 기본 풀 초기화
-            if (defaultSparkPrefab != null)
-            {
-                var defaultPool = new List<ParticleSystem>();
-                Prewarm(defaultSparkPrefab, defaultPool, defaultPrewarmSize);
-                pools[defaultSparkPrefab] = defaultPool;
-            }
-            else
-            {
-                Debug.LogWarning("[HitSparkPool] defaultSparkPrefab이 할당되지 않았습니다.", this);
-            }
-
-            // 조합별 매핑 초기화
-            if (sparkEntries == null) return;
-            foreach (SparkEntry entry in sparkEntries)
+            if (effectEntries == null) return;
+            foreach (EffectEntry entry in effectEntries)
             {
                 if (entry.prefab == null) continue;
 
-                var key = (entry.attackType, entry.damageType);
-                prefabMap[key] = entry.prefab;
-
-                if (!pools.ContainsKey(entry.prefab))
+                EffectBase sample = entry.prefab.GetComponent<EffectBase>();
+                if (sample == null)
                 {
-                    var pool = new List<ParticleSystem>();
-                    Prewarm(entry.prefab, pool, entry.prewarmSize);
-                    pools[entry.prefab] = pool;
+                    Debug.LogError($"[HitSparkPool] '{entry.prefab.name}'에 EffectBase 컴포넌트가 없습니다.", entry.prefab);
+                    continue;
+                }
+
+                HitEffectType type = sample.EffectType;
+                if (!pools.ContainsKey(type))
+                    pools[type] = new List<EffectBase>();
+
+                for (int i = 0; i < entry.prewarmSize; i++)
+                {
+                    EffectBase instance = CreateInstance(entry.prefab);
+                    if (instance != null) pools[type].Add(instance);
                 }
             }
         }
 
-        /// <summary>재생이 끝난 파티클을 매 프레임 체크해 비활성화한다.</summary>
-        private void Update()
+        /// <summary>씬 언로드 시 재생 중인 이펙트를 중단하고 파괴된 참조를 정리한다.</summary>
+        private void OnSceneUnloaded(UnityEngine.SceneManagement.Scene _)
         {
             foreach (var pool in pools.Values)
             {
-                for (int i = 0; i < pool.Count; i++)
-                {
-                    ParticleSystem ps = pool[i];
-                    if (ps == null || !ps.gameObject.activeSelf) continue;
-                    if (!ps.IsAlive())
-                    {
-                        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-                        ps.gameObject.SetActive(false);
-                    }
-                }
+                foreach (EffectBase effect in pool)
+                    if (effect != null && effect.gameObject.activeSelf)
+                        effect.Stop();
+                pool.RemoveAll(e => e == null);
             }
+        }
+
+        /// <summary>오브젝트 파괴 시 싱글톤 참조 및 이벤트 구독 해제</summary>
+        private void OnDestroy()
+        {
+            UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            if (Instance == this) Instance = null;
         }
 
         // ─────────────────────────────────────────
@@ -124,72 +112,69 @@ namespace G1
         // ─────────────────────────────────────────
 
         /// <summary>
-        /// 피격 위치에 스파크 이펙트를 재생한다.
-        /// AttackType/DamageType 조합에 맞는 프리팹을 사용하며, 매핑이 없으면 기본 프리팹으로 폴백한다.
+        /// 플래그로 조합된 이펙트들을 worldPos에서 동시 재생한다.
+        /// 등록되지 않은 플래그는 무시한다.
         /// </summary>
-        /// <param name="worldPos">피격 위치</param>
-        /// <param name="attackType">공격 종류</param>
-        /// <param name="damageType">데미지 유형</param>
-        public void Show(Vector3 worldPos, AttackType attackType = AttackType.Physical, DamageType damageType = DamageType.Normal)
+        /// <param name="worldPos">이펙트 중심 월드 좌표</param>
+        /// <param name="effects">재생할 이펙트 조합 (비트 플래그)</param>
+        public void Show(Vector3 worldPos, HitEffectType effects)
         {
-            var key = (attackType, damageType);
-            GameObject prefab = prefabMap.TryGetValue(key, out var mapped) ? mapped : defaultSparkPrefab;
-
-            if (prefab == null) return;
-            if (!pools.TryGetValue(prefab, out var pool))
+            foreach (HitEffectType type in allEffectTypes)
             {
-                Debug.LogWarning($"[HitSparkPool] prefab '{prefab.name}'에 대한 풀이 없습니다. Awake 초기화를 확인하세요.", this);
-                return;
-            }
+                if (type == HitEffectType.None) continue;
+                if ((effects & type) == 0) continue;
 
-            ParticleSystem ps = GetFromPool(prefab, pool);
-            if (ps == null) return;
-            ps.transform.position = worldPos;
-            ps.gameObject.SetActive(true);
-            ps.Play();
+                if (!pools.TryGetValue(type, out var pool))
+                {
+                    Debug.LogWarning($"[HitSparkPool] '{type}' 이펙트가 등록되지 않았습니다.", this);
+                    continue;
+                }
+
+                EffectBase effect = GetFromPool(type, pool);
+                effect?.Play(worldPos);
+            }
         }
 
         // ─────────────────────────────────────────
         // 내부 처리
         // ─────────────────────────────────────────
 
-        /// <summary>풀에서 비활성 파티클을 꺼내거나, 없으면 동적 생성한다.</summary>
-        private ParticleSystem GetFromPool(GameObject prefab, List<ParticleSystem> pool)
+        /// <summary>풀에서 비활성 인스턴스를 꺼내거나, 없으면 동적 생성한다.</summary>
+        private EffectBase GetFromPool(HitEffectType type, List<EffectBase> pool)
         {
-            for (int i = 0; i < pool.Count; i++)
-                if (pool[i] != null && !pool[i].gameObject.activeSelf)
-                    return pool[i];
+            foreach (EffectBase e in pool)
+                if (e != null && !e.gameObject.activeSelf)
+                    return e;
 
-            ParticleSystem newPs = CreateInstance(prefab);
-            if (newPs != null)
-                pool.Add(newPs);
-            return newPs;
-        }
-
-        /// <summary>프리팹을 prewarmCount만큼 미리 생성해 풀에 채운다.</summary>
-        private void Prewarm(GameObject prefab, List<ParticleSystem> pool, int count)
-        {
-            for (int i = 0; i < count; i++)
+            // 풀에 등록된 프리팹을 찾아 동적 생성
+            if (effectEntries == null) return null;
+            foreach (EffectEntry entry in effectEntries)
             {
-                ParticleSystem ps = CreateInstance(prefab);
-                if (ps != null)
-                    pool.Add(ps);
+                if (entry.prefab == null) continue;
+                EffectBase sample = entry.prefab.GetComponent<EffectBase>();
+                if (sample != null && sample.EffectType == type)
+                {
+                    EffectBase newInstance = CreateInstance(entry.prefab);
+                    if (newInstance != null) pool.Add(newInstance);
+                    return newInstance;
+                }
             }
+            return null;
         }
 
-        /// <summary>새 파티클 인스턴스를 생성하고 비활성화 상태로 반환한다.</summary>
-        private ParticleSystem CreateInstance(GameObject prefab)
+        /// <summary>프리팹 인스턴스를 생성하고 비활성화 상태로 반환한다.</summary>
+        private EffectBase CreateInstance(GameObject prefab)
         {
             GameObject go = Instantiate(prefab, transform);
-            ParticleSystem ps = go.GetComponent<ParticleSystem>();
-            if (ps == null)
+            EffectBase effect = go.GetComponent<EffectBase>();
+            if (effect == null)
             {
-                Debug.LogError($"[HitSparkPool] {prefab.name}에 ParticleSystem 컴포넌트가 없습니다.", go);
+                Debug.LogError($"[HitSparkPool] {prefab.name}에 EffectBase 컴포넌트가 없습니다.", go);
                 Destroy(go);
                 return null;
             }
             go.SetActive(false);
-            return ps;
+            return effect;
         }
     }
 }

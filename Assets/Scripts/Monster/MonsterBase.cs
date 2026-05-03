@@ -31,6 +31,12 @@ namespace G1
         /// <summary>deathSound 재생 후 deathDownSound까지의 딜레이 (초)</summary>
         [SerializeField] private float deathDownDelay = 0.8f;
 
+        [Header("피격 이펙트")]
+        /// <summary>피격 시 재생할 이펙트 조합 (비트 플래그, Inspector에서 체크박스로 선택)</summary>
+        [SerializeField] private HitEffectType hitEffects = HitEffectType.Ring;
+        /// <summary>이펙트 위치에서 데미지 팝업까지의 추가 Y 오프셋 (미터)</summary>
+        [SerializeField] private float popupYOffset = 0.5f;
+
         [Header("사망 처리")]
         /// <summary>사망 애니메이션 재생 후 풀에 반납하기까지 대기 시간 (초)</summary>
         [SerializeField] private float releaseDelay = 3f;
@@ -73,12 +79,6 @@ namespace G1
         /// <summary>재 파티클 딜레이 코루틴. ResetState 시 중단해 풀 반납 후 재생을 방지한다.</summary>
         private Coroutine ashVfxCoroutine;
 
-        /// <summary>
-        /// 데미지 팝업 스폰 기준 위치 (목 본 또는 높이 추정값).
-        /// Awake에서 캐싱되며 TakeDamage에서 사용된다.
-        /// </summary>
-        private Transform neckBone;
-
         private HitFlasher hitFlasher;
         private MonsterDissolve monsterDissolve;
 
@@ -109,40 +109,18 @@ namespace G1
             animator = GetComponent<Animator>();
             col = GetComponent<Collider>();
             currentHealth = maxHealth;
-            neckBone = FindNeckBone(transform);
             hitFlasher = GetComponent<HitFlasher>();
             monsterDissolve = GetComponent<MonsterDissolve>();
         }
 
         /// <summary>
-        /// 자식 오브젝트 중 이름에 "neck"이 포함된 Transform을 재귀 탐색해 반환한다.
-        /// 없으면 null을 반환한다.
+        /// 피격 이펙트 중심 위치를 반환한다.
+        /// CapsuleCollider 높이의 50% 지점(몸통 중간)을 기준으로 한다.
         /// </summary>
-        private static Transform FindNeckBone(Transform root)
+        private Vector3 GetEffectPos()
         {
-            for (int i = 0; i < root.childCount; i++)
-            {
-                Transform child = root.GetChild(i);
-                if (child.name.IndexOf("neck", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    return child;
-                Transform found = FindNeckBone(child);
-                if (found != null) return found;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// 데미지 팝업 스폰 위치를 반환한다.
-        /// 목 본이 있으면 그 위치, 없으면 콜라이더 높이의 80% 지점을 추정해 반환한다.
-        /// </summary>
-        private Vector3 GetPopupSpawnPos()
-        {
-            if (neckBone != null)
-                return neckBone.position;
-
-            // 목 본이 없을 때 — CapsuleCollider 높이 기준 80% 지점 추정
             float height = col is CapsuleCollider cap ? cap.height : 1.8f;
-            return transform.position + Vector3.up * (height * 0.8f);
+            return transform.position + Vector3.up * (height * 0.5f);
         }
 
         // ─────────────────────────────────────────
@@ -165,9 +143,9 @@ namespace G1
 
             if (damage > 0)
             {
-                Vector3 popupPos = GetPopupSpawnPos();
-                PlayHitEffects(attackType, damageType, popupPos);
-                DamagePopupPool.Instance?.Show(damage, popupPos, damageType == DamageType.Critical);
+                Vector3 effectPos = GetEffectPos();
+                PlayHitEffects(effectPos);
+                DamagePopupPool.Instance?.Show(damage, effectPos + Vector3.up * popupYOffset, damageType == DamageType.Critical);
             }
 
             if (currentHealth <= 0)
@@ -175,12 +153,12 @@ namespace G1
         }
 
         /// <summary>피격 시각/청각 연출을 재생한다. TakeDamage에서 호출된다.</summary>
-        private void PlayHitEffects(AttackType attackType, DamageType damageType, Vector3 popupPos)
+        private void PlayHitEffects(Vector3 effectPos)
         {
             animator.SetTrigger(HitHash);
             hitFlasher?.Flash();
             HitStop.Instance?.Trigger();
-            HitSparkPool.Instance?.Show(popupPos, attackType, damageType);
+            HitSparkPool.Instance?.Show(effectPos, hitEffects);
         }
 
         // ─────────────────────────────────────────
