@@ -1,6 +1,9 @@
 # --- [ MCP 설정 ] ---
 .mcp.json
 
+# --- [ Unity 빌드 임시 파일 ] ---
+/*_BurstDebugInformation_DoNotShip/
+
 # --- [ Unity 필수 제외 폴더 ] ---
 /[Ll]ibrary/
 /[Tt]emp/
