@@ -10,11 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5637d8d6ca8572940bc2c7c33e1f30a4, type: 3}
-  m_Name: pants_01
+  m_Name: topwear_01
   m_EditorClassIdentifier: Assembly-CSharp::G1.OutfitData
-  outfitName: "\uBC18\uBC14\uC9C0"
-  thumbnail: {fileID: 21300000, guid: b421dee355b62574ebfdfad0733a0fe7, type: 3}
-  prefab: {fileID: 5358084854094313501, guid: 21b014d4ea795ed4b9c6de50827195dd, type: 3}
-  slot: 1
+  outfitName: "\uD2F0\uC154\uCE20"
+  thumbnail: {fileID: 0}
+  prefab: {fileID: 6902146227904840867, guid: 0a001a0a62e63c742aa1063279df5ca1, type: 3}
+  slot: 0
   bodyMaterial: {fileID: 0}
-  hideBodyParts: 16
+  hideBodyParts: 1

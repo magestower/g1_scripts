@@ -42,6 +42,14 @@ namespace G1
 
             Undo.RegisterFullObjectHierarchyUndo(target, "Copy Components");
 
+            // Transform 값 복사 (position, rotation, scale)
+            Transform srcTr = source.transform;
+            Transform dstTr = target.transform;
+            dstTr.position   = srcTr.position;
+            dstTr.rotation   = srcTr.rotation;
+            dstTr.localScale = srcTr.localScale;
+            Debug.Log("[복사 완료] Transform (position / rotation / localScale)");
+
             foreach (Component comp in components)
             {
                 if (comp is Transform) continue;

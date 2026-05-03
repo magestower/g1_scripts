@@ -32,7 +32,7 @@ namespace Terresquall {
 
         static VirtualJoystick[] FindAll() {
 #if UNITY_2022_2_OR_NEWER
-            return FindObjectsByType<VirtualJoystick>(FindObjectsSortMode.None);
+            return FindObjectsByType<VirtualJoystick>();
 #else
             return FindObjectsOfType<VirtualJoystick>();
 #endif

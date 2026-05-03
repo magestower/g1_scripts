@@ -398,7 +398,7 @@ AnimatorController:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: maru_chest_01_20260406_remap_1
+  m_Name: maru_animator
   serializedVersion: 6
   m_AnimatorParameters:
   - m_Name: isWalking

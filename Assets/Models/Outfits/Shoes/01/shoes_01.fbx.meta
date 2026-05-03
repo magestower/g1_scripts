@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 93193b30c7653014a90352fb14027906
+guid: 670551f9c1291134092adbab8250fdd2
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
@@ -7,8 +7,8 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
-      name: pants_toon_material
-    second: {fileID: 2100000, guid: 002afa28cd329f746b371ae37d93427d, type: 2}
+      name: shoes_01_material
+    second: {fileID: 2100000, guid: 75416c2af3b3c1f47922ea5b3dac728a, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
