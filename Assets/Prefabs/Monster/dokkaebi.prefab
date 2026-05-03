@@ -297,15 +297,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 0871a8ee7030df84b88d820680241a85, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 1.25
+      value: 1.55285
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 0871a8ee7030df84b88d820680241a85, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: -0.31492
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 0871a8ee7030df84b88d820680241a85, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -5
+      value: -6.41083
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 0871a8ee7030df84b88d820680241a85, type: 3}
       propertyPath: m_LocalRotation.w
@@ -730,9 +730,9 @@ CapsuleCollider:
   m_Enabled: 1
   serializedVersion: 2
   m_Radius: 0.3
-  m_Height: 1.5
+  m_Height: 1
   m_Direction: 1
-  m_Center: {x: 0, y: 0.75, z: 0}
+  m_Center: {x: 0, y: 0.5, z: 0}
 --- !u!114 &8966286728170887283
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -749,6 +749,8 @@ MonoBehaviour:
   deathSound: {fileID: 8300000, guid: 91a9b2c92c93c764f8b50cb4c1712e07, type: 3}
   deathDownSound: {fileID: 8300000, guid: 001f691d110d55648871a03f446ffa08, type: 3}
   deathDownDelay: 0.8
+  hitEffects: 3
+  popupYOffset: 0.5
   releaseDelay: 3
   detectRadius: 8
   attackRadius: 0.7
@@ -807,7 +809,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 750ce4d242a2d654da6fa33962c8a246, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::G1.HitFlasher
-  flashColor: {r: 0.7433963, g: 0.52037734, b: 0.52037734, a: 1}
+  flashColor: {r: 0.3207547, g: 0.10348878, b: 0.10348878, a: 1}
   flashDuration: 0.25
 --- !u!114 &4430238969571854051
 MonoBehaviour:

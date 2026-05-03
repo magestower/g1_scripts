@@ -12,8 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 50c6f714fa02d684e80cf2608649c22d, type: 3}
   m_Name: PlayerStat
   m_EditorClassIdentifier: Assembly-CSharp::G1.PlayerStat
+  level: 1
   maxHealth: 100
   attackPower: 10
-  criticalChance: 0.2
+  criticalChance: 0
   criticalMultiplier: 2
   defense: 0

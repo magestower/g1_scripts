@@ -30,12 +30,16 @@ namespace G1
         [SerializeField] private GameObject baseMesh_Torso;
         [SerializeField] private GameObject baseMesh_Legs;
         [SerializeField] private GameObject baseMesh_Foots;
+        [SerializeField] private GameObject baseMesh_Hip;
+        [SerializeField] private GameObject baseMesh_Hands;
 
         [Header("자동 검색 폴백 (이름 검색) - 디버깅용")]
-        [SerializeField] private string fallbackTorsoName = "body_torso";
-        [SerializeField] private string fallbackHeadName = "body_head";
-        [SerializeField] private string fallbackLegsName = "body_legs";
-        [SerializeField] private string fallbackFootsName = "body_foots";
+        [SerializeField] private string fallbackTorsoName = "base_torso";
+        [SerializeField] private string fallbackHeadName = "base_head";
+        [SerializeField] private string fallbackLegsName = "base_legs";
+        [SerializeField] private string fallbackFootsName = "base_foots";
+        [SerializeField] private string fallbackHipName = "base_hip";
+        [SerializeField] private string fallbackHandsName = "base_hands";
 
         /// <summary>슬롯별로 현재 장착된 의상 인스턴스를 보관하는 딕셔너리</summary>
         private readonly Dictionary<OutfitSlot, GameObject> _equippedOutfits
@@ -75,6 +79,10 @@ namespace G1
                 baseMesh_Legs = transform.FindDeep(fallbackLegsName)?.gameObject;
             if (baseMesh_Foots == null)
                 baseMesh_Foots = transform.FindDeep(fallbackFootsName)?.gameObject;
+            if (baseMesh_Hip == null)
+                baseMesh_Hip = transform.FindDeep(fallbackHipName)?.gameObject;
+            if (baseMesh_Hands == null)
+                baseMesh_Hands = transform.FindDeep(fallbackHandsName)?.gameObject;
 
             // 2. 그래도 null이면 강력 경고
             if (baseMesh_Torso == null)
@@ -224,10 +232,12 @@ namespace G1
             }
 
             // 플래그에 따라 각 신체 부위 ON/OFF
-            if (baseMesh_Head != null) baseMesh_Head.SetActive(!hidden.HasFlag(BodyPartFlags.Head));
+            if (baseMesh_Head != null)  baseMesh_Head.SetActive(!hidden.HasFlag(BodyPartFlags.Head));
             if (baseMesh_Torso != null) baseMesh_Torso.SetActive(!hidden.HasFlag(BodyPartFlags.Torso));
-            if (baseMesh_Legs != null) baseMesh_Legs.SetActive(!hidden.HasFlag(BodyPartFlags.Legs));
+            if (baseMesh_Legs != null)  baseMesh_Legs.SetActive(!hidden.HasFlag(BodyPartFlags.Legs));
             if (baseMesh_Foots != null) baseMesh_Foots.SetActive(!hidden.HasFlag(BodyPartFlags.Shoes));
+            if (baseMesh_Hip != null)   baseMesh_Hip.SetActive(!hidden.HasFlag(BodyPartFlags.Hip));
+            if (baseMesh_Hands != null) baseMesh_Hands.SetActive(!hidden.HasFlag(BodyPartFlags.Hands));
         }		
 
         // ──────────────────────────────────────────────────────────────
