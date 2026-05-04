@@ -84,7 +84,8 @@ namespace G1
         /// <param name="worldPos">3D 재생 위치</param>
         /// <param name="volume">볼륨 (0~1)</param>
         /// <param name="pitchVariance">랜덤 피치 편차. 0이면 고정 피치 1.</param>
-        public void Play(AudioClip clip, Vector3 worldPos, float volume = 1f, float pitchVariance = 0.1f)
+        /// <param name="priority">오디오 우선순위. 0=최고, 256=최저, 기본값=128. 채널 한도 초과 시 우선순위 낮은 소리가 먼저 끊긴다.</param>
+        public void Play(AudioClip clip, Vector3 worldPos, float volume = 1f, float pitchVariance = 0.1f, int priority = 128)
         {
             if (clip == null) return;
 
@@ -95,6 +96,7 @@ namespace G1
             source.transform.position = worldPos;
             source.clip = clip;
             source.volume = volume;
+            source.priority = Mathf.Clamp(priority, 0, 256);
             // 피치 미세 변주로 반복 재생 시 기계적인 느낌 방지
             source.pitch = 1f + Random.Range(-safeVariance, safeVariance);
             source.gameObject.SetActive(true);

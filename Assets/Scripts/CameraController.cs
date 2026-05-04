@@ -14,6 +14,7 @@ namespace G1
 
     	private float _currentDistance;		// 현재 보간되는 거리
     	private float _targetDistance;      // 목표 distance
+    	private Vector3 _prevShakeOffset;   // 이전 프레임 셰이크 오프셋 — 스무딩 누적 방지용
 
     	/// <summary>
     	/// Awake: 인스펙터 미할당 시 씬에서 PlayerController를 자동 탐색하여 target을 설정합니다.
@@ -63,7 +64,15 @@ namespace G1
     		_currentDistance = Mathf.Lerp(_currentDistance, _targetDistance, distanceLerpSpeed * Time.deltaTime);
 
     		Vector3 desiredPosition = target.position - transform.forward * _currentDistance + Vector3.up * height;
-            transform.position = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed * Time.deltaTime);
+
+            // 이전 프레임 셰이크 오프셋을 제거한 순수 카메라 위치를 Lerp 시작점으로 사용한다.
+            // 제거하지 않으면 셰이크 오프셋이 매 프레임 스무딩에 혼입되어 셰이크 종료 후 드리프트가 발생한다.
+            Vector3 basePosition = transform.position - _prevShakeOffset;
+            Vector3 smoothed = Vector3.Lerp(basePosition, desiredPosition, smoothSpeed * Time.deltaTime);
+
+            Vector3 shakeOffset = CameraShake.Instance != null ? CameraShake.Instance.Offset : Vector3.zero;
+            transform.position = smoothed + shakeOffset;
+            _prevShakeOffset = shakeOffset;
         }
     }
 }

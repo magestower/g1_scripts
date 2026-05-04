@@ -81,10 +81,7 @@ namespace G1
             PlayHitEffects(attackType, damageType, hitPos);
 
             if (currentHealth <= 0)
-            {
-                animator.ResetTrigger(AnimParam.Hit);
                 TransitionTo(PlayerState.Dead);
-            }
         }
 
         /// <summary>피격 시각/사운드 연출을 재생한다. TakeDamage에서 호출된다.</summary>
@@ -418,12 +415,24 @@ namespace G1
             }
             else
             {
-                // 정지 상태: 주기적으로 가장 가까운 몬스터를 향해 회전
+                // 탐색: 주기적으로 가장 가까운 몬스터를 CurrentAttackTarget에 갱신
                 autoAimTimer += Time.deltaTime;
                 if (autoAimTimer >= autoAimUpdateInterval)
                 {
                     autoAimTimer = 0f;
-                    FaceNearestMonster();
+                    UpdateNearestMonsterTarget();
+                }
+                // 회전: 매 프레임 Slerp — 탐색 주기와 분리해 뚝뚝 끊김 방지
+                // activeInHierarchy: 탐색 갱신(0.1초) 사이에 몬스터가 풀 반납될 경우 비활성 오브젝트 위치 접근 방지
+                if (CurrentAttackTarget != null && CurrentAttackTarget.gameObject.activeInHierarchy)
+                {
+                    Vector3 dir = CurrentAttackTarget.position - transform.position;
+                    dir.y = 0f;
+                    if (dir.sqrMagnitude >= 0.001f)
+                    {
+                        Quaternion targetRot = Quaternion.LookRotation(dir);
+                        transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, rotationSpeed * Time.deltaTime);
+                    }
                 }
             }
 
@@ -433,11 +442,11 @@ namespace G1
         }
 
         /// <summary>
-        /// 감지 반경 내에서 가장 가까운 몬스터를 찾아 플레이어가 해당 방향을 바라보도록 즉시 회전합니다.
-        /// 현재 타겟이 공격 사정거리 안에 살아있으면 타겟을 유지하고 해당 방향을 바라봅니다.
-        /// 몬스터가 없으면 아무 동작도 하지 않습니다.
+        /// 감지 반경 내에서 가장 가까운 몬스터를 찾아 CurrentAttackTarget을 갱신한다.
+        /// 현재 타겟이 공격 사정거리 안에 살아있으면 타겟을 유지한다.
+        /// 회전은 HandleMovement에서 매 프레임 Slerp로 처리한다.
         /// </summary>
-        private void FaceNearestMonster()
+        private void UpdateNearestMonsterTarget()
         {
             // 현재 타겟이 사정거리 안에서 살아있으면 타겟 고정
             // activeInHierarchy 체크: 풀 반납 후 ResetState로 IsDead=false가 된 오브젝트 오판 방지
@@ -446,46 +455,33 @@ namespace G1
                 float distToCurrent = Vector3.Distance(transform.position, CurrentAttackTarget.position);
                 bool currentAlive = !CurrentAttackTarget.TryGetComponent<IDamageable>(out var d) || !d.IsDead;
                 if (currentAlive && distToCurrent <= hitRadius)
-                {
-                    FaceToward(CurrentAttackTarget);
                     return;
-                }
             }
 
-            // monsterTag를 가진 콜라이더를 감지 반경 내에서 탐색 (NonAlloc으로 GC 방지)
-            int hitCount = Physics.OverlapSphereNonAlloc(transform.position, monsterDetectRadius, monsterHitBuffer);
-
-            Transform nearest = null;
-            float minDist = float.MaxValue;
-
-            for (int i = 0; i < hitCount; i++)
-            {
-                Collider hit = monsterHitBuffer[i];
-                if (!hit.CompareTag(monsterTag)) continue;
-
-                float dist = Vector3.Distance(transform.position, hit.transform.position);
-                if (dist < minDist)
-                {
-                    minDist = dist;
-                    nearest = hit.transform;
-                }
-            }
-
-            CurrentAttackTarget = nearest;
-            if (nearest != null)
-                FaceToward(nearest);
+            CurrentAttackTarget = FindNearestMonsterInRadius(monsterDetectRadius);
         }
 
         /// <summary>
-        /// 대상 방향(수평)으로 즉시 회전합니다. 거리가 너무 가까우면 무시합니다.
+        /// radius 반경 내에서 monsterTag를 가진 가장 가까운 몬스터의 Transform을 반환한다.
+        /// 없으면 null을 반환한다. monsterHitBuffer를 재사용해 GC를 방지한다.
         /// </summary>
-        /// <param name="target">바라볼 대상 트랜스폼</param>
-        private void FaceToward(Transform target)
+        /// <param name="radius">탐색 반경</param>
+        private Transform FindNearestMonsterInRadius(float radius)
         {
-            Vector3 dir = target.position - transform.position;
-            dir.y = 0f;
-            if (dir.sqrMagnitude < 0.001f) return;
-            transform.rotation = Quaternion.LookRotation(dir);
+            int hitCount = Physics.OverlapSphereNonAlloc(transform.position, radius, monsterHitBuffer);
+            Transform nearest = null;
+            float minDist = float.MaxValue;
+            for (int i = 0; i < hitCount; i++)
+            {
+                if (!monsterHitBuffer[i].CompareTag(monsterTag)) continue;
+                float dist = Vector3.Distance(transform.position, monsterHitBuffer[i].transform.position);
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                    nearest = monsterHitBuffer[i].transform;
+                }
+            }
+            return nearest;
         }
 
 
@@ -561,9 +557,6 @@ namespace G1
             DamageType damageType = isCritical ? DamageType.Critical : DamageType.Normal;
 
             TargetType targetType = CurrentAttackData != null ? CurrentAttackData.targetType : TargetType.Single;
-
-            // hitRadius 반경 내 Monster 태그 콜라이더 탐색
-            int count = Physics.OverlapSphereNonAlloc(transform.position, hitRadius, monsterHitBuffer);
             bool hit = false;
 
             if (targetType == TargetType.Single)
@@ -581,21 +574,7 @@ namespace G1
                 }
 
                 if (target == null)
-                {
-                    Collider nearest = null;
-                    float minDist = float.MaxValue;
-                    for (int i = 0; i < count; i++)
-                    {
-                        if (!monsterHitBuffer[i].CompareTag(monsterTag)) continue;
-                        float dist = Vector3.Distance(transform.position, monsterHitBuffer[i].transform.position);
-                        if (dist < minDist)
-                        {
-                            minDist = dist;
-                            nearest = monsterHitBuffer[i];
-                        }
-                    }
-                    nearest?.TryGetComponent(out target);
-                }
+                    FindNearestMonsterInRadius(hitRadius)?.TryGetComponent(out target);
 
                 if (target != null)
                 {
@@ -606,6 +585,7 @@ namespace G1
             else
             {
                 // 광역 대상 — 반경 내 모든 몬스터에게 적용
+                int count = Physics.OverlapSphereNonAlloc(transform.position, hitRadius, monsterHitBuffer);
                 for (int i = 0; i < count; i++)
                 {
                     if (!monsterHitBuffer[i].CompareTag(monsterTag)) continue;
@@ -657,6 +637,9 @@ namespace G1
                 case PlayerState.Dead:
                     animator.SetBool(AnimParam.IsWalking, false);
                     animator.SetBool(AnimParam.IsDead, true);
+                    // Dead 전환 후 Hit 트리거 정리 — MonsterBase와 동일한 패턴.
+                    // ResetTrigger를 먼저 호출하면 즉사 시 피격 애니메이션이 취소되므로 SetBool 이후에 정리한다.
+                    animator.ResetTrigger(AnimParam.Hit);
                     if (prev == PlayerState.Moving) OnMoveStateChanged?.Invoke(false);
                     if (prev == PlayerState.Attacking) OnAttackStateChanged?.Invoke(false);
                     OnPlayerDead?.Invoke();

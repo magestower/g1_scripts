@@ -76,7 +76,7 @@ namespace G1
             {
                 bool landed = player.OnAttackHit(data.damage);
                 if (landed && data.hitSound != null && SoundManager.Instance != null)
-                    SoundManager.Instance.Play(data.hitSound, player.transform.position, pitchVariance: 0.1f);
+                    SoundManager.Instance.Play(data.hitSound, player.transform.position, volume: 0.5f, pitchVariance: 0.1f);
                 hasHit = true;
             }
         }

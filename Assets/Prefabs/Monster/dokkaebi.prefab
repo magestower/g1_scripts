@@ -749,8 +749,18 @@ MonoBehaviour:
   deathSound: {fileID: 8300000, guid: 91a9b2c92c93c764f8b50cb4c1712e07, type: 3}
   deathDownSound: {fileID: 8300000, guid: 001f691d110d55648871a03f446ffa08, type: 3}
   deathDownDelay: 0.8
-  hitEffects: 3
+  hitEffectOverrides:
+  - damageType: 0
+    effects: 3
+  - damageType: 1
+    effects: 8
+  defaultHitEffects: 1
   popupYOffset: 0.5
+  shakeOverrides: []
+  defaultShake:
+    duration: 0.15
+    magnitude: 0.08
+    frequency: 20
   releaseDelay: 3
   detectRadius: 8
   attackRadius: 0.7

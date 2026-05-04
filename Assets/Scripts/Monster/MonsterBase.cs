@@ -3,6 +3,14 @@ using UnityEngine;
 
 namespace G1
 {
+    /// <summary>DamageType별 이펙트 조합을 매핑하는 Inspector용 항목</summary>
+    [System.Serializable]
+    public struct DamageTypeEffectEntry
+    {
+        public DamageType damageType;
+        public HitEffectType effects;
+    }
+
     /// <summary>
     /// 모든 몬스터의 공통 기능을 담은 베이스 클래스.
     /// 체력 관리, 피격 처리, 사망 처리를 제공한다.
@@ -32,10 +40,18 @@ namespace G1
         [SerializeField] private float deathDownDelay = 0.8f;
 
         [Header("피격 이펙트")]
-        /// <summary>피격 시 재생할 이펙트 조합 (비트 플래그, Inspector에서 체크박스로 선택)</summary>
-        [SerializeField] private HitEffectType hitEffects = HitEffectType.Ring;
+        /// <summary>DamageType별 이펙트 설정 목록. 매칭되는 항목이 없으면 defaultHitEffects를 사용한다.</summary>
+        [SerializeField] private DamageTypeEffectEntry[] hitEffectOverrides;
+        /// <summary>hitEffectOverrides에 매칭 항목이 없을 때 사용할 기본 이펙트 조합</summary>
+        [SerializeField] private HitEffectType defaultHitEffects = HitEffectType.Ring;
         /// <summary>이펙트 위치에서 데미지 팝업까지의 추가 Y 오프셋 (미터)</summary>
         [SerializeField] private float popupYOffset = 0.5f;
+
+        [Header("카메라 셰이크")]
+        /// <summary>
+        /// 이 몬스터에만 적용할 셰이크 오버라이드. 비워두면 CameraShakeConfig(Resources) 전역 설정을 사용한다.
+        /// </summary>
+        [SerializeField] private DamageTypeShakeEntry[] shakeOverrides;
 
         [Header("사망 처리")]
         /// <summary>사망 애니메이션 재생 후 풀에 반납하기까지 대기 시간 (초)</summary>
@@ -81,6 +97,8 @@ namespace G1
 
         private HitFlasher hitFlasher;
         private MonsterDissolve monsterDissolve;
+        /// <summary>Resources에서 로드한 전역 셰이크 설정. shakeOverrides 미매칭 시 폴백으로 사용한다.</summary>
+        private static CameraShakeConfig _shakeConfig;
 
         /// <summary>현재 체력이 0 이하인지 여부</summary>
         public bool IsDead { get; protected set; }
@@ -111,6 +129,11 @@ namespace G1
             currentHealth = maxHealth;
             hitFlasher = GetComponent<HitFlasher>();
             monsterDissolve = GetComponent<MonsterDissolve>();
+            // static 캐시 — 첫 번째 몬스터가 로드하고 이후 인스턴스는 재사용한다
+            // ??= 는 C# 네이티브 null 비교라 Unity가 파괴한 오브젝트를 감지하지 못한다.
+            // Unity == 연산자를 사용해 씬 재로드 후 파괴된 에셋 참조를 재로드한다.
+            if (_shakeConfig == null)
+                _shakeConfig = Resources.Load<CameraShakeConfig>("CameraShakeConfig");
         }
 
         /// <summary>
@@ -144,7 +167,7 @@ namespace G1
             if (damage > 0)
             {
                 Vector3 effectPos = GetEffectPos();
-                PlayHitEffects(effectPos);
+                PlayHitEffects(effectPos, damageType);
                 DamagePopupPool.Instance?.Show(damage, effectPos + Vector3.up * popupYOffset, damageType == DamageType.Critical);
             }
 
@@ -153,12 +176,46 @@ namespace G1
         }
 
         /// <summary>피격 시각/청각 연출을 재생한다. TakeDamage에서 호출된다.</summary>
-        private void PlayHitEffects(Vector3 effectPos)
+        private void PlayHitEffects(Vector3 effectPos, DamageType damageType)
         {
             animator.SetTrigger(HitHash);
             hitFlasher?.Flash();
             HitStop.Instance?.Trigger();
-            HitSparkPool.Instance?.Show(effectPos, hitEffects);
+            HitSparkPool.Instance?.Show(effectPos, ResolveHitEffects(damageType));
+            CameraShake.Instance?.Trigger(ResolveShakePreset(damageType));
+        }
+
+        /// <summary>damageType에 대응하는 이펙트 조합을 반환한다. 오버라이드 항목이 없으면 defaultHitEffects를 사용한다.</summary>
+        private HitEffectType ResolveHitEffects(DamageType damageType)
+        {
+            if (hitEffectOverrides != null)
+                foreach (DamageTypeEffectEntry entry in hitEffectOverrides)
+                    if (entry.damageType == damageType)
+                        return entry.effects;
+            return defaultHitEffects;
+        }
+
+        /// <summary>
+        /// damageType에 대응하는 셰이크 프리셋을 반환한다.
+        /// 우선순위: 인스턴스 shakeOverrides → CameraShakeConfig.shakeOverrides → CameraShakeConfig.defaultShake
+        /// </summary>
+        private ShakePreset ResolveShakePreset(DamageType damageType)
+        {
+            if (shakeOverrides != null)
+                foreach (DamageTypeShakeEntry entry in shakeOverrides)
+                    if (entry.damageType == damageType)
+                        return entry.preset;
+
+            if (_shakeConfig != null)
+            {
+                if (_shakeConfig.shakeOverrides != null)
+                    foreach (DamageTypeShakeEntry entry in _shakeConfig.shakeOverrides)
+                        if (entry.damageType == damageType)
+                            return entry.preset;
+                return _shakeConfig.defaultShake;
+            }
+
+            return default;
         }
 
         // ─────────────────────────────────────────
@@ -195,11 +252,13 @@ namespace G1
         protected virtual void Die()
         {
             IsDead = true;
-            animator.ResetTrigger(HitHash);
+            // ResetTrigger를 SetBool 이후로 이동 — TakeDamage에서 SetTrigger(Hit) 후 Die()가 호출되는 즉사 흐름에서
+            // 피격 트리거를 먼저 취소하면 Hit 애니메이션이 재생되지 않으므로, Dead 전환 후 정리한다.
             animator.SetBool(DeadHash, true);
+            animator.ResetTrigger(HitHash);
             col.enabled = false;
             if (deathSound != null && SoundManager.Instance != null)
-                SoundManager.Instance.Play(deathSound, transform.position, pitchVariance: 0.05f);
+                SoundManager.Instance.Play(deathSound, transform.position, pitchVariance: 0.05f, priority: 0);
             StartDeathRoutines();
         }
 

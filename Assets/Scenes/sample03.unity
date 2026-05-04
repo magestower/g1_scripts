@@ -1728,6 +1728,50 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::G1.CameraAspectFitter
   targetWidth: 1080
   targetHeight: 1920
+--- !u!1 &642619188
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 642619190}
+  - component: {fileID: 642619189}
+  m_Layer: 0
+  m_Name: CameraShake
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &642619189
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 642619188}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a33d14ed5563034d866582307a0f6bb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::G1.CameraShake
+--- !u!4 &642619190
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 642619188}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 1, y: 1, z: -5}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &660637181
 GameObject:
   m_ObjectHideFlags: 0
@@ -2064,6 +2108,10 @@ MonoBehaviour:
   - prefab: {fileID: 7775783105450064569, guid: e346d512a5fff0247a654f450df78826, type: 3}
     prewarmSize: 4
   - prefab: {fileID: 2658386466364800328, guid: b04a99da5aaae3740b25e8dd639acf20, type: 3}
+    prewarmSize: 4
+  - prefab: {fileID: 8939153564860297322, guid: 13c601457f427a9458159993958f844d, type: 3}
+    prewarmSize: 4
+  - prefab: {fileID: 83571693134332156, guid: e4ac9b8845fd3f4489cf64595b29e5bc, type: 3}
     prewarmSize: 4
 --- !u!4 &1159889323
 Transform:
@@ -14512,6 +14560,7 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 598112301}
+  - {fileID: 642619190}
   - {fileID: 331534928}
   - {fileID: 6912651077948907012}
   - {fileID: 759500716}

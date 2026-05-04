@@ -15,6 +15,6 @@ MonoBehaviour:
   level: 1
   maxHealth: 100
   attackPower: 10
-  criticalChance: 0
+  criticalChance: 0.1
   criticalMultiplier: 2
   defense: 0
